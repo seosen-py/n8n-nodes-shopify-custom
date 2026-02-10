@@ -1,0 +1,1112 @@
+import type { IDataObject } from 'n8n-workflow';
+import {
+	COLLECTION_CREATE_MUTATION,
+	COLLECTION_DELETE_MUTATION,
+	COLLECTION_GET_MANY_QUERY,
+	COLLECTION_GET_QUERY,
+	COLLECTION_UPDATE_MUTATION,
+} from './templates/collection';
+import {
+	CUSTOMER_CREATE_MUTATION,
+	CUSTOMER_DELETE_MUTATION,
+	CUSTOMER_GET_MANY_QUERY,
+	CUSTOMER_GET_QUERY,
+	CUSTOMER_UPDATE_MUTATION,
+} from './templates/customer';
+import {
+	DRAFT_ORDER_CREATE_MUTATION,
+	DRAFT_ORDER_DELETE_MUTATION,
+	DRAFT_ORDER_GET_MANY_QUERY,
+	DRAFT_ORDER_GET_QUERY,
+	DRAFT_ORDER_UPDATE_MUTATION,
+} from './templates/draftOrder';
+import {
+	METAFIELD_DEFINITION_CREATE_MUTATION,
+	METAFIELD_DEFINITION_DELETE_MUTATION,
+	METAFIELD_DEFINITION_GET_QUERY,
+	METAFIELD_DEFINITION_LIST_QUERY,
+	METAFIELD_DEFINITION_TYPES_QUERY,
+	METAFIELD_DEFINITION_UPDATE_MUTATION,
+	METAFIELD_DELETE_MUTATION,
+	METAFIELD_GET_MANY_QUERY,
+	METAFIELD_GET_QUERY,
+	METAFIELD_SET_MUTATION,
+} from './templates/metafields';
+import {
+	METAOBJECT_CREATE_MUTATION,
+	METAOBJECT_DELETE_MUTATION,
+	METAOBJECT_GET_MANY_QUERY,
+	METAOBJECT_GET_QUERY,
+	METAOBJECT_UPDATE_MUTATION,
+} from './templates/metaobject';
+import {
+	ORDER_CREATE_MUTATION,
+	ORDER_DELETE_MUTATION,
+	ORDER_GET_MANY_QUERY,
+	ORDER_GET_QUERY,
+	ORDER_UPDATE_MUTATION,
+} from './templates/order';
+import {
+	PRODUCT_CREATE_MUTATION,
+	PRODUCT_DELETE_MUTATION,
+	PRODUCT_GET_MANY_QUERY,
+	PRODUCT_GET_QUERY,
+	PRODUCT_UPDATE_MUTATION,
+} from './templates/product';
+import {
+	PRODUCT_VARIANT_CREATE_MUTATION,
+	PRODUCT_VARIANT_DELETE_MUTATION,
+	PRODUCT_VARIANT_GET_MANY_QUERY,
+	PRODUCT_VARIANT_GET_QUERY,
+	PRODUCT_VARIANT_UPDATE_MUTATION,
+} from './templates/productVariant';
+import type { IShopifyUserError } from '../errors';
+import type { ShopifyOperationKey } from '../../config/operations/types';
+import { decodeMetafieldRuleOptionValue } from '../collections/ruleConditions';
+import { decodeDefinitionOptionValue } from '../metafields/definitions';
+
+interface IRegistryPaginationConfig {
+	connectionPath: string[];
+	firstVariableName?: string;
+	afterVariableName?: string;
+}
+
+export interface IRegistryOperation {
+	document: string;
+	buildVariables(parameters: IDataObject): IDataObject;
+	mapSimplified(data: IDataObject): unknown;
+	getUserErrors?(data: IDataObject): IShopifyUserError[] | undefined;
+	pagination?: IRegistryPaginationConfig;
+}
+
+function isObject(value: unknown): value is IDataObject {
+	return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function asString(value: unknown): string | undefined {
+	if (value === undefined || value === null) {
+		return undefined;
+	}
+	const normalized = String(value).trim();
+	return normalized.length > 0 ? normalized : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+	if (value === undefined || value === null) {
+		return undefined;
+	}
+	return Boolean(value);
+}
+
+function asNumber(value: unknown): number | undefined {
+	if (value === undefined || value === null || value === '') {
+		return undefined;
+	}
+	const parsed = Number(value);
+	return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function parseTags(value: unknown): string[] | undefined {
+	const raw = asString(value);
+	if (!raw) {
+		return undefined;
+	}
+
+	const tags = raw
+		.split(',')
+		.map((tag) => tag.trim())
+		.filter((tag) => tag.length > 0);
+
+	return tags.length > 0 ? tags : undefined;
+}
+
+function parseSeoInput(parameters: IDataObject): { title?: string; description?: string } | undefined {
+	const title = asString(parameters.seoTitle);
+	const description = asString(parameters.seoDescription);
+
+	if (!title && !description) {
+		return undefined;
+	}
+
+	return {
+		title,
+		description,
+	};
+}
+
+function getPaginationOptions(parameters: IDataObject): IDataObject {
+	if (isObject(parameters.paginationOptions)) {
+		return parameters.paginationOptions;
+	}
+	if (isObject(parameters.options)) {
+		return parameters.options;
+	}
+	return {};
+}
+
+function getConnectionVariables(parameters: IDataObject): IDataObject {
+	const options = getPaginationOptions(parameters);
+	const sorting = isObject(options.sorting) ? options.sorting : {};
+	const limit = asNumber(parameters.limit) ?? 50;
+	return {
+		first: Math.max(1, Math.trunc(limit)),
+		after: asString(options.afterCursor),
+		query: asString(options.query ?? parameters.query),
+		sortKey: asString(sorting.sortKey ?? options.sortKey ?? parameters.sortKey),
+		reverse: asBoolean(sorting.reverse ?? options.reverse ?? parameters.reverse),
+	};
+}
+
+function parseSelectedMetafieldKeys(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) {
+		return undefined;
+	}
+
+	const keys = value
+		.map((item) => asString(item))
+		.filter((item): item is string => !!item)
+		.map((item) => {
+			try {
+				const definition = decodeDefinitionOptionValue(item);
+				const namespace = asString(definition.namespace);
+				const key = asString(definition.key);
+				if (!namespace || !key) {
+					return undefined;
+				}
+				return `${namespace}.${key}`;
+			} catch {
+				const fallback = asString(item);
+				if (!fallback || !fallback.includes('.')) {
+					return undefined;
+				}
+				return fallback;
+			}
+		})
+		.filter((item): item is string => !!item);
+
+	if (keys.length === 0) {
+		return undefined;
+	}
+
+	return Array.from(new Set(keys));
+}
+
+function getMetafieldReadVariables(parameters: IDataObject): IDataObject {
+	const options = getPaginationOptions(parameters);
+	const metafields = isObject(options.metafields) ? options.metafields : {};
+	const selectedMetafieldKeys = parseSelectedMetafieldKeys(
+		metafields.selectedMetafields ??
+			options.selectedMetafields ??
+			parameters.selectedMetafields,
+	);
+	return {
+		includeMetafields: Boolean(
+			metafields.includeMetafields ?? options.includeMetafields ?? parameters.includeMetafields,
+		),
+		metafieldsFirst: 250,
+		metafieldKeys: selectedMetafieldKeys,
+		resolveMetafieldReferences: Boolean(
+			metafields.resolveMetafieldReferences ??
+				options.resolveMetafieldReferences ??
+				parameters.resolveMetafieldReferences,
+		),
+		metafieldReferencesFirst: 50,
+	};
+}
+
+function getPathValue(source: IDataObject, path: string[]): unknown {
+	let current: unknown = source;
+	for (const chunk of path) {
+		if (Array.isArray(current)) {
+			const index = Number(chunk);
+			if (Number.isNaN(index)) {
+				return undefined;
+			}
+			current = current[index];
+			continue;
+		}
+		if (!isObject(current)) {
+			return undefined;
+		}
+		current = current[chunk];
+	}
+	return current;
+}
+
+const JSON_METAFIELD_TYPES = new Set([
+	'json',
+	'rich_text_field',
+	'money',
+	'rating',
+	'dimension',
+	'volume',
+	'weight',
+]);
+
+function shouldParseMetafieldValue(typeName: string | undefined): boolean {
+	if (!typeName) {
+		return false;
+	}
+	return typeName.startsWith('list.') || JSON_METAFIELD_TYPES.has(typeName);
+}
+
+function parseMetafieldValue(typeName: string | undefined, value: unknown): unknown {
+	if (!shouldParseMetafieldValue(typeName) || typeof value !== 'string') {
+		return value;
+	}
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return value;
+	}
+	try {
+		return JSON.parse(trimmed);
+	} catch {
+		return value;
+	}
+}
+
+function normalizeMetafieldNode(metafield: IDataObject): IDataObject {
+	const typeName = asString(metafield.type);
+	const parsedValue = parseMetafieldValue(typeName, metafield.value);
+	let changed = false;
+	const normalized: IDataObject = { ...metafield };
+
+	if (parsedValue !== metafield.value) {
+		normalized.value = parsedValue as never;
+		changed = true;
+	}
+
+	if (isObject(metafield.references) && Array.isArray(metafield.references.nodes)) {
+		normalized.references = metafield.references.nodes.filter(isObject);
+		changed = true;
+	}
+
+	if (Array.isArray(metafield.references)) {
+		normalized.references = metafield.references.filter(isObject);
+		changed = true;
+	}
+
+	if (isObject(metafield.reference)) {
+		normalized.reference = metafield.reference;
+		changed = true;
+	}
+
+	return changed ? normalized : metafield;
+}
+
+function normalizeMetafieldArray(value: unknown): IDataObject[] {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	return value.filter(isObject).map(normalizeMetafieldNode);
+}
+
+function normalizeNode(node: IDataObject): IDataObject {
+	const normalized: IDataObject = { ...node };
+	let changed = false;
+
+	if (isObject(node.metafield)) {
+		normalized.metafield = normalizeMetafieldNode(node.metafield as IDataObject);
+		changed = true;
+	}
+
+	if (isObject(node.metafields) && Array.isArray(node.metafields.nodes)) {
+		normalized.metafields = normalizeMetafieldArray(node.metafields.nodes);
+		changed = true;
+	}
+
+	if (Array.isArray(node.metafields)) {
+		normalized.metafields = normalizeMetafieldArray(node.metafields);
+		changed = true;
+	}
+
+	return changed ? normalized : node;
+}
+
+function mapNodesFromConnection(data: IDataObject, connectionPath: string[]): IDataObject[] {
+	const connection = getPathValue(data, connectionPath);
+	if (!isObject(connection) || !Array.isArray(connection.nodes)) {
+		return [];
+	}
+	return connection.nodes.filter(isObject).map(normalizeNode);
+}
+
+function mapSingleNode(data: IDataObject, path: string[]): IDataObject | undefined {
+	const node = getPathValue(data, path);
+	return isObject(node) ? normalizeNode(node) : undefined;
+}
+
+function mapMutationPayload(data: IDataObject, path: string[]): IDataObject | undefined {
+	const payload = getPathValue(data, path);
+	return isObject(payload) ? payload : undefined;
+}
+
+function parseLineItems(value: unknown): Array<{ variantId: string; quantity: number }> {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return [];
+	}
+
+	return value.items
+		.filter(isObject)
+		.map((item) => {
+			const variantId = asString(item.variantId);
+			const quantity = asNumber(item.quantity);
+			if (!variantId || !quantity) {
+				return undefined;
+			}
+			return {
+				variantId,
+				quantity: Math.max(1, Math.trunc(quantity)),
+			};
+		})
+		.filter((item): item is { variantId: string; quantity: number } => item !== undefined);
+}
+
+function parseCollectionProductIds(value: unknown): string[] | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const productIds = value.items
+		.filter(isObject)
+		.map((item) => asString(item.productId))
+		.filter((item): item is string => !!item);
+
+	return productIds.length > 0 ? Array.from(new Set(productIds)) : undefined;
+}
+
+function parseCollectionRules(
+	value: unknown,
+): Array<{
+	column: string;
+	relation: string;
+	condition: string;
+	conditionObjectId?: string;
+}> | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	function resolveMetafieldConditionValue(item: IDataObject): string | undefined {
+		const encodedRule = asString(item.metafieldRule);
+		if (!encodedRule) {
+			return undefined;
+		}
+
+		const decodedRule = decodeMetafieldRuleOptionValue(encodedRule);
+		if (!decodedRule) {
+			return undefined;
+		}
+
+		switch (decodedRule.valueType) {
+			case 'boolean': {
+				const booleanValue = asBoolean(item.metafieldValueBoolean);
+				return booleanValue === undefined ? undefined : booleanValue ? 'true' : 'false';
+			}
+			case 'number': {
+				const numberValue = asNumber(item.metafieldValueNumber);
+				return numberValue === undefined ? undefined : String(numberValue);
+			}
+			case 'metaobject_reference':
+				return asString(item.metafieldValueMetaobjectId);
+			case 'text':
+			default:
+				return asString(item.metafieldValueText);
+		}
+	}
+
+	const rules = value.items
+		.filter(isObject)
+		.map((item) => {
+			const source = asString(item.ruleSource) ?? 'native';
+			const nativeRelation = asString(item.nativeRelation);
+
+			if (source === 'metafield') {
+				const encodedRule = asString(item.metafieldRule);
+				const decodedRule = encodedRule ? decodeMetafieldRuleOptionValue(encodedRule) : undefined;
+				const condition = resolveMetafieldConditionValue(item);
+				const effectiveRelation = asString(decodedRule?.defaultRelation);
+
+				if (!decodedRule || !effectiveRelation || condition === undefined) {
+					return undefined;
+				}
+
+				return {
+					column: decodedRule.ruleType,
+					relation: effectiveRelation,
+					condition,
+					conditionObjectId: decodedRule.definitionId,
+				};
+			}
+
+			const column = asString(item.nativeRuleType);
+			const condition = asString(item.nativeValue);
+			if (!column || !nativeRelation || condition === undefined) {
+				return undefined;
+			}
+
+			const parsedRule: {
+				column: string;
+				relation: string;
+				condition: string;
+				conditionObjectId?: string;
+			} = {
+				column,
+				relation: nativeRelation,
+				condition,
+			};
+
+			return parsedRule;
+		})
+		.filter(
+			(item): item is { column: string; relation: string; condition: string; conditionObjectId?: string } =>
+				item !== undefined,
+		);
+
+	return rules.length > 0 ? rules : undefined;
+}
+
+function parseValidations(value: unknown): Array<{ name: string; value: string }> | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const validations = value.items
+		.filter(isObject)
+		.map((item) => {
+			const name = asString(item.name);
+			const validationValue = asString(item.value);
+			if (!name || validationValue === undefined) {
+				return undefined;
+			}
+			return {
+				name,
+				value: validationValue,
+			};
+		})
+		.filter((validation): validation is { name: string; value: string } => validation !== undefined);
+
+	return validations.length > 0 ? validations : undefined;
+}
+
+function parseMetaobjectFieldInputs(value: unknown): Array<{ key: string; value: string }> | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const fields = value.items
+		.filter(isObject)
+		.map((item) => {
+			const key = asString(item.key);
+			const fieldValue = asString(item.value);
+			if (!key || fieldValue === undefined) {
+				return undefined;
+			}
+			return {
+				key,
+				value: fieldValue,
+			};
+		})
+		.filter((field): field is { key: string; value: string } => field !== undefined);
+
+	return fields.length > 0 ? fields : undefined;
+}
+
+function parseUserErrors(data: IDataObject, path: string[]): IShopifyUserError[] {
+	const payload = getPathValue(data, path);
+	if (!isObject(payload) || !Array.isArray(payload.userErrors)) {
+		return [];
+	}
+	return payload.userErrors
+		.filter(isObject)
+		.map((item) => ({
+			field: Array.isArray(item.field)
+				? item.field.filter(
+						(fieldPart: unknown): fieldPart is string => typeof fieldPart === 'string',
+					)
+				: null,
+			message: String(item.message ?? 'Unknown Shopify user error'),
+			code: asString(item.code) ?? null,
+		}));
+}
+
+function withId<T extends IDataObject>(idFieldName: string, input: T, parameters: IDataObject): T {
+	const id = asString(parameters[idFieldName]);
+	if (!id) {
+		return input;
+	}
+	return {
+		...input,
+		id,
+	};
+}
+
+const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
+	'product.create': {
+		document: PRODUCT_CREATE_MUTATION,
+		buildVariables: (parameters) => ({
+			product: {
+				title: asString(parameters.title),
+				handle: asString(parameters.handle),
+				descriptionHtml: asString(parameters.descriptionHtml),
+				seo: parseSeoInput(parameters),
+				templateSuffix: asString(parameters.templateSuffix),
+				vendor: asString(parameters.vendor),
+				productType: asString(parameters.productType),
+				status: asString(parameters.status),
+				tags: parseTags(parameters.tags),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['productCreate', 'product']),
+		getUserErrors: (data) => parseUserErrors(data, ['productCreate']),
+	},
+	'product.get': {
+		document: PRODUCT_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.productId),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['product']),
+	},
+	'product.getMany': {
+		document: PRODUCT_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getConnectionVariables(parameters),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['products']),
+		pagination: {
+			connectionPath: ['products'],
+		},
+	},
+	'product.update': {
+		document: PRODUCT_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			product: withId(
+				'productId',
+				{
+					title: asString(parameters.title),
+					handle: asString(parameters.handle),
+					descriptionHtml: asString(parameters.descriptionHtml),
+					seo: parseSeoInput(parameters),
+					templateSuffix: asString(parameters.templateSuffix),
+					vendor: asString(parameters.vendor),
+					productType: asString(parameters.productType),
+					status: asString(parameters.status),
+					tags: parseTags(parameters.tags),
+				},
+				parameters,
+			),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['productUpdate', 'product']),
+		getUserErrors: (data) => parseUserErrors(data, ['productUpdate']),
+	},
+	'product.delete': {
+		document: PRODUCT_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			input: {
+				id: asString(parameters.productId),
+			},
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['productDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['productDelete']),
+	},
+	'productVariant.create': {
+		document: PRODUCT_VARIANT_CREATE_MUTATION,
+		buildVariables: (parameters) => ({
+			productId: asString(parameters.productId),
+			variants: [
+				{
+					title: asString(parameters.title),
+					sku: asString(parameters.sku),
+					barcode: asString(parameters.barcode),
+					price: asNumber(parameters.price)?.toString(),
+					compareAtPrice: asNumber(parameters.compareAtPrice)?.toString(),
+					taxable: asBoolean(parameters.taxable),
+				},
+			],
+		}),
+		mapSimplified: (data) => getPathValue(data, ['productVariantsBulkCreate', 'productVariants']) ?? [],
+		getUserErrors: (data) => parseUserErrors(data, ['productVariantsBulkCreate']),
+	},
+	'productVariant.get': {
+		document: PRODUCT_VARIANT_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.variantId),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['productVariant']),
+	},
+	'productVariant.getMany': {
+		document: PRODUCT_VARIANT_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getConnectionVariables(parameters),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['productVariants']),
+		pagination: {
+			connectionPath: ['productVariants'],
+		},
+	},
+	'productVariant.update': {
+		document: PRODUCT_VARIANT_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			productId: asString(parameters.productId),
+			variants: [
+				{
+					id: asString(parameters.variantId),
+					title: asString(parameters.title),
+					sku: asString(parameters.sku),
+					barcode: asString(parameters.barcode),
+					price: asNumber(parameters.price)?.toString(),
+					compareAtPrice: asNumber(parameters.compareAtPrice)?.toString(),
+					taxable: asBoolean(parameters.taxable),
+				},
+			],
+		}),
+		mapSimplified: (data) => getPathValue(data, ['productVariantsBulkUpdate', 'productVariants']) ?? [],
+		getUserErrors: (data) => parseUserErrors(data, ['productVariantsBulkUpdate']),
+	},
+	'productVariant.delete': {
+		document: PRODUCT_VARIANT_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			productId: asString(parameters.productId),
+			variantsIds: [asString(parameters.variantId)].filter(
+				(item): item is string => typeof item === 'string',
+			),
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['productVariantsBulkDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['productVariantsBulkDelete']),
+	},
+	'collection.create': {
+		document: COLLECTION_CREATE_MUTATION,
+		buildVariables: (parameters) => {
+			const collectionType = asString(parameters.collectionType) ?? 'manual';
+			const products = parseCollectionProductIds(parameters.manualProducts);
+			const rules = parseCollectionRules(parameters.collectionRules);
+			const ruleSet =
+				collectionType === 'smart' && rules
+					? {
+							appliedDisjunctively: (asString(parameters.smartRuleMatchMode) ?? 'all') === 'any',
+							rules,
+						}
+					: undefined;
+
+			return {
+				input: {
+					title: asString(parameters.title),
+					handle: asString(parameters.handle),
+					descriptionHtml: asString(parameters.descriptionHtml),
+					seo: parseSeoInput(parameters),
+					templateSuffix: asString(parameters.templateSuffix),
+					products: collectionType === 'manual' ? products : undefined,
+					ruleSet,
+				},
+			};
+		},
+		mapSimplified: (data) => mapSingleNode(data, ['collectionCreate', 'collection']),
+		getUserErrors: (data) => parseUserErrors(data, ['collectionCreate']),
+	},
+	'collection.get': {
+		document: COLLECTION_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.collectionId),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['collection']),
+	},
+	'collection.getMany': {
+		document: COLLECTION_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getConnectionVariables(parameters),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['collections']),
+		pagination: {
+			connectionPath: ['collections'],
+		},
+	},
+	'collection.update': {
+		document: COLLECTION_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			input: withId(
+				'collectionId',
+				{
+					title: asString(parameters.title),
+					handle: asString(parameters.handle),
+					descriptionHtml: asString(parameters.descriptionHtml),
+					seo: parseSeoInput(parameters),
+					templateSuffix: asString(parameters.templateSuffix),
+				},
+				parameters,
+			),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['collectionUpdate', 'collection']),
+		getUserErrors: (data) => parseUserErrors(data, ['collectionUpdate']),
+	},
+	'collection.delete': {
+		document: COLLECTION_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			input: {
+				id: asString(parameters.collectionId),
+			},
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['collectionDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['collectionDelete']),
+	},
+	'customer.create': {
+		document: CUSTOMER_CREATE_MUTATION,
+		buildVariables: (parameters) => ({
+			input: {
+				email: asString(parameters.email),
+				phone: asString(parameters.phone),
+				firstName: asString(parameters.firstName),
+				lastName: asString(parameters.lastName),
+				note: asString(parameters.note),
+				taxExempt: asBoolean(parameters.taxExempt),
+				tags: parseTags(parameters.tags),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['customerCreate', 'customer']),
+		getUserErrors: (data) => parseUserErrors(data, ['customerCreate']),
+	},
+	'customer.get': {
+		document: CUSTOMER_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.customerId),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['customer']),
+	},
+	'customer.getMany': {
+		document: CUSTOMER_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getConnectionVariables(parameters),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['customers']),
+		pagination: {
+			connectionPath: ['customers'],
+		},
+	},
+	'customer.update': {
+		document: CUSTOMER_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			input: withId(
+				'customerId',
+				{
+					email: asString(parameters.email),
+					phone: asString(parameters.phone),
+					firstName: asString(parameters.firstName),
+					lastName: asString(parameters.lastName),
+					note: asString(parameters.note),
+					taxExempt: asBoolean(parameters.taxExempt),
+					tags: parseTags(parameters.tags),
+				},
+				parameters,
+			),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['customerUpdate', 'customer']),
+		getUserErrors: (data) => parseUserErrors(data, ['customerUpdate']),
+	},
+	'customer.delete': {
+		document: CUSTOMER_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			input: {
+				id: asString(parameters.customerId),
+			},
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['customerDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['customerDelete']),
+	},
+	'order.create': {
+		document: ORDER_CREATE_MUTATION,
+		buildVariables: (parameters) => ({
+			order: {
+				email: asString(parameters.email),
+				note: asString(parameters.note),
+				tags: parseTags(parameters.tags),
+				lineItems: parseLineItems(parameters.lineItems),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['orderCreate', 'order']),
+		getUserErrors: (data) => parseUserErrors(data, ['orderCreate']),
+	},
+	'order.get': {
+		document: ORDER_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.orderId),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['order']),
+	},
+	'order.getMany': {
+		document: ORDER_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getConnectionVariables(parameters),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['orders']),
+		pagination: {
+			connectionPath: ['orders'],
+		},
+	},
+	'order.update': {
+		document: ORDER_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			input: {
+				id: asString(parameters.orderId),
+				email: asString(parameters.email),
+				note: asString(parameters.note),
+				tags: parseTags(parameters.tags),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['orderUpdate', 'order']),
+		getUserErrors: (data) => parseUserErrors(data, ['orderUpdate']),
+	},
+	'order.delete': {
+		document: ORDER_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			orderId: asString(parameters.orderId),
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['orderDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['orderDelete']),
+	},
+	'draftOrder.create': {
+		document: DRAFT_ORDER_CREATE_MUTATION,
+		buildVariables: (parameters) => ({
+			input: {
+				email: asString(parameters.email),
+				note: asString(parameters.note),
+				tags: parseTags(parameters.tags),
+				lineItems: parseLineItems(parameters.lineItems),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['draftOrderCreate', 'draftOrder']),
+		getUserErrors: (data) => parseUserErrors(data, ['draftOrderCreate']),
+	},
+	'draftOrder.get': {
+		document: DRAFT_ORDER_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.draftOrderId),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['draftOrder']),
+	},
+	'draftOrder.getMany': {
+		document: DRAFT_ORDER_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getConnectionVariables(parameters),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['draftOrders']),
+		pagination: {
+			connectionPath: ['draftOrders'],
+		},
+	},
+	'draftOrder.update': {
+		document: DRAFT_ORDER_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.draftOrderId),
+			input: {
+				email: asString(parameters.email),
+				note: asString(parameters.note),
+				tags: parseTags(parameters.tags),
+				lineItems: parseLineItems(parameters.lineItems),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['draftOrderUpdate', 'draftOrder']),
+		getUserErrors: (data) => parseUserErrors(data, ['draftOrderUpdate']),
+	},
+	'draftOrder.delete': {
+		document: DRAFT_ORDER_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			input: {
+				id: asString(parameters.draftOrderId),
+			},
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['draftOrderDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['draftOrderDelete']),
+	},
+	'metaobject.create': {
+		document: METAOBJECT_CREATE_MUTATION,
+		buildVariables: (parameters) => ({
+			metaobject: {
+				type: asString(parameters.metaobjectType),
+				handle: asString(parameters.handle),
+				fields: parseMetaobjectFieldInputs(parameters.metaobjectFields),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['metaobjectCreate', 'metaobject']),
+		getUserErrors: (data) => parseUserErrors(data, ['metaobjectCreate']),
+	},
+	'metaobject.get': {
+		document: METAOBJECT_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.metaobjectId),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['metaobject']),
+	},
+	'metaobject.getMany': {
+		document: METAOBJECT_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			type: asString(parameters.metaobjectType),
+			...getConnectionVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['metaobjects']),
+		pagination: {
+			connectionPath: ['metaobjects'],
+		},
+	},
+	'metaobject.update': {
+		document: METAOBJECT_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.metaobjectId),
+			metaobject: {
+				handle: asString(parameters.handle),
+				fields: parseMetaobjectFieldInputs(parameters.metaobjectFields),
+				redirectNewHandle: isObject(parameters.metaobjectOptions)
+					? asBoolean(parameters.metaobjectOptions.redirectNewHandle)
+					: undefined,
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['metaobjectUpdate', 'metaobject']),
+		getUserErrors: (data) => parseUserErrors(data, ['metaobjectUpdate']),
+	},
+	'metaobject.delete': {
+		document: METAOBJECT_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.metaobjectId),
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['metaobjectDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['metaobjectDelete']),
+	},
+	'metafieldValue.set': {
+		document: METAFIELD_SET_MUTATION,
+		buildVariables: (parameters) => ({
+			metafields: Array.isArray(parameters.metafieldsPayload)
+				? parameters.metafieldsPayload
+				: [],
+		}),
+		mapSimplified: (data) => normalizeMetafieldArray(getPathValue(data, ['metafieldsSet', 'metafields'])),
+		getUserErrors: (data) => parseUserErrors(data, ['metafieldsSet']),
+	},
+	'metafieldValue.get': {
+		document: METAFIELD_GET_QUERY,
+		buildVariables: (parameters) => ({
+			ownerId: asString(parameters.ownerId),
+			namespace: asString(parameters.namespace),
+			key: asString(parameters.key),
+		}),
+		mapSimplified: (data) => {
+			const nodes = getPathValue(data, ['nodes']);
+			if (!Array.isArray(nodes) || nodes.length === 0 || !isObject(nodes[0])) {
+				return undefined;
+			}
+			const node = nodes[0];
+			const metafield = (node.metafield as IDataObject | undefined) ?? undefined;
+			return metafield ? normalizeMetafieldNode(metafield) : undefined;
+		},
+	},
+	'metafieldValue.getMany': {
+		document: METAFIELD_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			ownerId: asString(parameters.ownerId),
+			namespace: asString(parameters.namespace),
+			first: Math.max(1, Math.trunc(asNumber(parameters.limit) ?? 50)),
+			after: asString(parameters.afterCursor),
+		}),
+		mapSimplified: (data) => {
+			const nodes = getPathValue(data, ['nodes']);
+			if (!Array.isArray(nodes) || nodes.length === 0 || !isObject(nodes[0])) {
+				return [];
+			}
+			const ownerNode = nodes[0] as IDataObject;
+			const metafieldsConnection = ownerNode.metafields;
+			if (!isObject(metafieldsConnection) || !Array.isArray(metafieldsConnection.nodes)) {
+				return [];
+			}
+			return normalizeMetafieldArray(metafieldsConnection.nodes);
+		},
+		pagination: {
+			connectionPath: ['nodes', '0', 'metafields'],
+		},
+	},
+	'metafieldValue.delete': {
+		document: METAFIELD_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			metafields: Array.isArray(parameters.metafieldsPayload)
+				? parameters.metafieldsPayload
+				: [],
+		}),
+		mapSimplified: (data) => getPathValue(data, ['metafieldsDelete', 'deletedMetafields']) ?? [],
+		getUserErrors: (data) => parseUserErrors(data, ['metafieldsDelete']),
+	},
+	'metafieldDefinition.list': {
+		document: METAFIELD_DEFINITION_LIST_QUERY,
+		buildVariables: (parameters) => ({
+			ownerType: asString(parameters.ownerType),
+			query: asString(parameters.query),
+			first: Math.max(1, Math.trunc(asNumber(parameters.limit) ?? 50)),
+			after: asString(parameters.afterCursor),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['metafieldDefinitions']),
+		pagination: {
+			connectionPath: ['metafieldDefinitions'],
+		},
+	},
+	'metafieldDefinition.get': {
+		document: METAFIELD_DEFINITION_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.definitionId),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['node']),
+	},
+	'metafieldDefinition.create': {
+		document: METAFIELD_DEFINITION_CREATE_MUTATION,
+		buildVariables: (parameters) => ({
+			definition: {
+				ownerType: asString(parameters.ownerType),
+				name: asString(parameters.name),
+				namespace: asString(parameters.namespace),
+				key: asString(parameters.key),
+				type: asString(parameters.definitionType),
+				description: asString(parameters.description),
+				validations: parseValidations(parameters.validations),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['metafieldDefinitionCreate', 'createdDefinition']),
+		getUserErrors: (data) => parseUserErrors(data, ['metafieldDefinitionCreate']),
+	},
+	'metafieldDefinition.update': {
+		document: METAFIELD_DEFINITION_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			definition: {
+				id: asString(parameters.definitionId),
+				name: asString(parameters.name),
+				description: asString(parameters.description),
+				validations: parseValidations(parameters.validations),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['metafieldDefinitionUpdate', 'updatedDefinition']),
+		getUserErrors: (data) => parseUserErrors(data, ['metafieldDefinitionUpdate']),
+	},
+	'metafieldDefinition.delete': {
+		document: METAFIELD_DEFINITION_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.definitionId),
+			deleteAllAssociatedMetafields: asBoolean(parameters.deleteAllAssociatedMetafields),
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['metafieldDefinitionDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['metafieldDefinitionDelete']),
+	},
+	'service.listDefinitionTypes': {
+		document: METAFIELD_DEFINITION_TYPES_QUERY,
+		buildVariables: () => ({}),
+		mapSimplified: (data) => getPathValue(data, ['metafieldDefinitionTypes']) ?? [],
+	},
+};
+
+export function getRegistryOperation(operationKey: ShopifyOperationKey): IRegistryOperation {
+	return operationRegistry[operationKey];
+}

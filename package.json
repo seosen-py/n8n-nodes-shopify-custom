@@ -1,0 +1,62 @@
+{
+	"name": "n8n-nodes-shopify-custom",
+	"version": "2.0.2",
+	"description": "Shopify Admin GraphQL custom node for n8n with full metafield workflow",
+	"license": "MIT",
+	"homepage": "https://github.com/seosen-py/n8n-nodes-shopify-custom",
+	"keywords": [
+		"n8n-community-node-package",
+		"n8n",
+		"shopify",
+		"metafields",
+		"graphql"
+	],
+	"author": {
+		"name": "seosenpy",
+		"email": "seo.orchid.kid@gmail.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/seosen-py/n8n-nodes-shopify-custom.git"
+	},
+	"bugs": {
+		"url": "https://github.com/seosen-py/n8n-nodes-shopify-custom/issues"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"publish:demo": "npm publish --access public --tag demo",
+		"release": "n8n-node release",
+		"prepublishOnly": "npm run lint && npm run build"
+	},
+	"publishConfig": {
+		"access": "public",
+		"tag": "demo"
+	},
+	"files": [
+		"dist"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [
+			"dist/credentials/ShopifyCustomAdminApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/ShopifyCustom/ShopifyCustom.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "*",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^19.0.4",
+		"typescript": "5.9.2"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
+}

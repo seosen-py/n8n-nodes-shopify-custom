@@ -1,0 +1,18 @@
+{
+	"node": "n8n-nodes-shopify-custom",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Sales", "Ecommerce"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://shopify.dev/docs/api/admin-graphql"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://shopify.dev/docs/api/admin-graphql"
+			}
+		]
+	}
+}
