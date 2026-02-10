@@ -62,6 +62,99 @@ Most resources support:
 
 ---
 
+## 📚 Functional Breakdown
+
+- **Products / Product Variants:**
+  - **Get / Get Many:**
+    - Allows you to get a list of your products
+    - Allows you to get product metafields and their values together with products
+  - **Create / Update:**
+    - **Fields supported**
+      - **For products:**
+        - Default fields: `Title`, `Description`, `Vendor`, `Product type`, `Meta title`, `Meta description`, `Handle`, `Status`, `Tags`
+        - Allows you to assign a template by `Template Suffix`
+      - **For product variants:**
+        - `Title`, `SKU`, `Barcode`, `Price`, `Compare at price`, `Taxable`
+  - **Delete**
+
+- **Collections:**
+  - **Get / Get Many:**
+    - Allows you to get a list of collections
+    - Allows you to get metafields and their values for each collection
+  - **Create / Update:**
+    - **Fields supported**
+      - Default fields: `Title`, `Handle`, `Description`, `Meta title`, `Meta description`
+      - Conditions: `Manual` / `Smart` collection + conditions setup (including dynamic metafield loading)
+      - Allows you to assign a template by `Template Suffix`
+  - **Delete**
+
+- **Customers:**
+  - **Get / Get Many:**
+    - Allows you to get one customer or a list of customers
+    - Supports optional metafields loading with values
+  - **Create / Update:**
+    - **Fields supported:**
+      - `Email`, `Phone`, `First name`, `Last name`
+      - `Note`, `Tax exempt`, `Accepts marketing`, `Tags`
+  - **Delete**
+
+- **Orders:**
+  - **Get / Get Many:**
+    - Allows you to get one order or a list of orders
+    - Supports optional metafields loading with values
+  - **Create / Update:**
+    - **Fields supported:**
+      - Order fields: `Email`, `Note`, `Tags`
+      - Line items: `Variant ID`, `Quantity`
+  - **Delete**
+
+- **Draft Orders:**
+  - **Get / Get Many:**
+    - Allows you to get one draft order or a list of draft orders
+    - Supports optional metafields loading with values
+  - **Create / Update:**
+    - **Fields supported:**
+      - Draft order fields: `Email`, `Note`, `Tags`
+      - Line items: `Variant ID`, `Quantity`
+  - **Delete**
+
+- **Metafield Value:**
+  - **Set:**
+    - Mass set metafield values for selected owner type (`Product`, `Variant`, `Collection`, `Customer`, `Order`, `Draft Order`)
+    - Dynamic metafield definition picker
+    - Value input changes automatically based on metafield type
+  - **Get / Get Many:**
+    - Get one metafield by `Namespace + Key`
+    - Get many metafields from selected owner (with optional namespace filter)
+  - **Delete:**
+    - Delete one or many metafield values by selected definition
+
+- **Metafield Definition:**
+  - **List / Get:**
+    - Browse definitions by owner type
+    - Search and inspect existing definitions
+  - **Create / Update:**
+    - **Fields supported:**
+      - `Name`, `Namespace`, `Key`, `Type`
+      - `Description`
+      - Validation rules
+  - **Delete:**
+    - Delete a definition
+    - Optional delete of all associated metafield values
+
+- **Metaobjects:**
+  - **Get / Get Many:**
+    - Get a single metaobject or a list by type
+    - Supports pagination, search query and sorting
+  - **Create / Update:**
+    - **Fields supported:**
+      - `Type`, `Handle`
+      - Flexible key/value fields
+      - Update option for handle redirect
+  - **Delete**
+
+---
+
 ## 🧠 Metafields without the pain
 
 This node removes most of the manual complexity typically involved in Shopify metafield workflows:
