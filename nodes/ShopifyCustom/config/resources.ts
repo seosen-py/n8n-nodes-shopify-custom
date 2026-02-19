@@ -5,6 +5,7 @@ export type ShopifyResourceValue =
 	| 'customer'
 	| 'order'
 	| 'draftOrder'
+	| 'file'
 	| 'metaobject'
 	| 'metafieldValue'
 	| 'metafieldDefinition'
@@ -61,6 +62,11 @@ export const SHOPIFY_RESOURCE_DEFINITIONS: IShopifyResourceDefinition[] = [
 		name: 'Draft Order',
 		description: 'Manage draft orders',
 		ownerType: 'DRAFTORDER',
+	},
+	{
+		value: 'file',
+		name: 'File',
+		description: 'Manage Shopify files and media assets',
 	},
 	{
 		value: 'metaobject',

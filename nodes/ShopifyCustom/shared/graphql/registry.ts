@@ -21,6 +21,11 @@ import {
 	DRAFT_ORDER_UPDATE_MUTATION,
 } from './templates/draftOrder';
 import {
+	FILE_DELETE_MUTATION,
+	FILE_GET_MANY_QUERY,
+	FILE_UPDATE_MUTATION,
+} from './templates/file';
+import {
 	METAFIELD_DEFINITION_CREATE_MUTATION,
 	METAFIELD_DEFINITION_DELETE_MUTATION,
 	METAFIELD_DEFINITION_GET_QUERY,
@@ -512,6 +517,107 @@ function parseMetaobjectFieldInputs(value: unknown): Array<{ key: string; value:
 	return fields.length > 0 ? fields : undefined;
 }
 
+function parseFileUpdateInputs(value: unknown): IDataObject[] | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const updates = value.items
+		.filter(isObject)
+		.map((item) => {
+			const id = asString(item.fileId);
+			if (!id) {
+				return undefined;
+			}
+
+			const fileUpdateInput: IDataObject = {
+				id,
+			};
+			const alt = asString(item.alt);
+			const filename = asString(item.filename);
+
+			if (alt !== undefined) {
+				fileUpdateInput.alt = alt;
+			}
+			if (filename !== undefined) {
+				fileUpdateInput.filename = filename;
+			}
+
+			return Object.keys(fileUpdateInput).length > 1 ? fileUpdateInput : undefined;
+		})
+		.filter((item): item is IDataObject => item !== undefined);
+
+	return updates.length > 0 ? updates : undefined;
+}
+
+function parseFileIds(value: unknown): string[] | undefined {
+	if (Array.isArray(value)) {
+		const idsFromArray = value
+			.map((item) => asString(item))
+			.filter((item): item is string => !!item);
+		return idsFromArray.length > 0 ? Array.from(new Set(idsFromArray)) : undefined;
+	}
+
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const ids = value.items
+		.filter(isObject)
+		.map((item) => asString(item.fileId))
+		.filter((item): item is string => !!item);
+
+	return ids.length > 0 ? Array.from(new Set(ids)) : undefined;
+}
+
+function buildFileSearchQuery(baseQuery: string | undefined, options: IDataObject): string | undefined {
+	const terms: string[] = [];
+
+	const normalizedBase = asString(baseQuery);
+	if (normalizedBase) {
+		terms.push(normalizedBase);
+	}
+
+	const query = asString(options.query);
+	if (query) {
+		terms.push(query);
+	}
+
+	const usedIn = asString(options.usedIn);
+	if (usedIn) {
+		terms.push(`used_in:${usedIn}`);
+	}
+
+	const mediaType = asString(options.mediaType);
+	if (mediaType) {
+		terms.push(`media_type:${mediaType}`);
+	}
+
+	const additionalQuery = asString(options.additionalQuery);
+	if (additionalQuery) {
+		terms.push(additionalQuery);
+	}
+
+	return terms.length > 0 ? terms.join(' ') : undefined;
+}
+
+function getFileConnectionVariables(parameters: IDataObject, baseQuery?: string): IDataObject {
+	const options = isObject(parameters.fileQueryOptions)
+		? parameters.fileQueryOptions
+		: isObject(parameters.cleanupOptions)
+			? parameters.cleanupOptions
+			: {};
+	const limit = asNumber(parameters.limit) ?? 50;
+
+	return {
+		first: Math.max(1, Math.trunc(limit)),
+		after: asString(options.afterCursor),
+		query: buildFileSearchQuery(baseQuery, options),
+		sortKey: asString(options.sortKey),
+		reverse: asBoolean(options.reverse),
+	};
+}
+
 function parseUserErrors(data: IDataObject, path: string[]): IShopifyUserError[] {
 	const payload = getPathValue(data, path);
 	if (!isObject(payload) || !Array.isArray(payload.userErrors)) {
@@ -927,6 +1033,48 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		}),
 		mapSimplified: (data) => mapMutationPayload(data, ['draftOrderDelete']),
 		getUserErrors: (data) => parseUserErrors(data, ['draftOrderDelete']),
+	},
+	'file.getMany': {
+		document: FILE_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getFileConnectionVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['files']),
+		pagination: {
+			connectionPath: ['files'],
+		},
+	},
+	'file.update': {
+		document: FILE_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			files: parseFileUpdateInputs(parameters.fileUpdates) ?? [],
+		}),
+		mapSimplified: (data) => {
+			const updatedFiles = getPathValue(data, ['fileUpdate', 'files']);
+			if (!Array.isArray(updatedFiles)) {
+				return [];
+			}
+			return updatedFiles.filter(isObject).map(normalizeNode);
+		},
+		getUserErrors: (data) => parseUserErrors(data, ['fileUpdate']),
+	},
+	'file.delete': {
+		document: FILE_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			fileIds: parseFileIds(parameters.fileDeleteItems ?? parameters.fileIds) ?? [],
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['fileDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['fileDelete']),
+	},
+	'file.deleteUnusedImages': {
+		document: FILE_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getFileConnectionVariables(parameters, 'used_in:none media_type:IMAGE'),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['files']),
+		pagination: {
+			connectionPath: ['files'],
+		},
 	},
 	'metaobject.create': {
 		document: METAOBJECT_CREATE_MUTATION,

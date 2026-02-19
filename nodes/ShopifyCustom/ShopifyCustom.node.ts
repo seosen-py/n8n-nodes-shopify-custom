@@ -69,6 +69,14 @@ function toArrayOfObjects(value: unknown): IDataObject[] {
 	return [];
 }
 
+function chunkArray<T>(items: T[], size: number): T[][] {
+	const chunks: T[][] = [];
+	for (let index = 0; index < items.length; index += size) {
+		chunks.push(items.slice(index, index + size));
+	}
+	return chunks;
+}
+
 function mergeDisplayOptions(
 	baseDisplayOptions: INodeProperties['displayOptions'],
 	fieldDisplayOptions: INodeProperties['displayOptions'],
@@ -315,6 +323,75 @@ async function runRegistryOperation(
 	};
 }
 
+async function runDeleteUnusedImagesOperation(
+	executeFunctions: IExecuteFunctions,
+	parameters: IDataObject,
+	itemIndex: number,
+): Promise<{ simplified: unknown; raw: IDataObject }> {
+	const dryRun = Boolean(parameters.dryRun ?? true);
+	const listResult = await runRegistryOperation(
+		executeFunctions,
+		'file.deleteUnusedImages',
+		parameters,
+		itemIndex,
+	);
+	const matchedFiles = toArrayOfObjects(listResult.simplified);
+
+	if (dryRun || matchedFiles.length === 0) {
+		return {
+			simplified: {
+				dryRun,
+				matchedCount: matchedFiles.length,
+				deletedCount: 0,
+				deletedFileIds: [],
+				files: matchedFiles,
+			},
+			raw: {
+				list: listResult.raw,
+			},
+		};
+	}
+
+	const fileIds = matchedFiles
+		.map((item) => String(item.id ?? ''))
+		.filter((id) => id.length > 0);
+	const deleteResponses: IDataObject[] = [];
+	const deletedFileIds: string[] = [];
+
+	for (const fileIdChunk of chunkArray(fileIds, 100)) {
+		const deleteResult = await runRegistryOperation(
+			executeFunctions,
+			'file.delete',
+			{ fileIds: fileIdChunk },
+			itemIndex,
+		);
+		const deletePayload = toArrayOfObjects(deleteResult.simplified)[0];
+		if (!deletePayload) {
+			continue;
+		}
+
+		deleteResponses.push(deletePayload);
+		const chunkDeletedIds = Array.isArray(deletePayload.deletedFileIds)
+			? deletePayload.deletedFileIds.map((id) => String(id))
+			: [];
+		deletedFileIds.push(...chunkDeletedIds);
+	}
+
+	return {
+		simplified: {
+			dryRun: false,
+			matchedCount: matchedFiles.length,
+			deletedCount: deletedFileIds.length,
+			deletedFileIds,
+			files: matchedFiles,
+		},
+		raw: {
+			list: listResult.raw,
+			deletes: deleteResponses,
+		},
+	};
+}
+
 export class ShopifyCustom implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Shopify Custom',
@@ -459,12 +536,15 @@ export class ShopifyCustom implements INodeType {
 					operationParameters.afterCursor = '';
 				}
 
-				const mainResult = await runRegistryOperation(
-					this,
-					operationConfig.registryKey,
-					operationParameters,
-					itemIndex,
-				);
+				const mainResult =
+					resource === 'file' && operation === 'deleteUnusedImages'
+						? await runDeleteUnusedImagesOperation(this, operationParameters, itemIndex)
+						: await runRegistryOperation(
+								this,
+								operationConfig.registryKey,
+								operationParameters,
+								itemIndex,
+							);
 
 				const outputItems = mapOutputItems(
 					outputMode,

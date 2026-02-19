@@ -47,6 +47,7 @@ The single node **`Shopify Custom`** includes resource-based actions:
 | Customer | ✔ |
 | Order | ✔ |
 | Draft Order | ✔ |
+| File | ✔ |
 | Metaobject | ✔ |
 | Metafield Value | ✔ |
 | Metafield Definition | ✔ |
@@ -152,6 +153,19 @@ Most resources support:
       - Flexible key/value fields
       - Update option for handle redirect
   - **Delete**
+
+- **Files / Media:**
+  - **Get Many:**
+    - Get store files and media assets
+    - Filter by usage, media type, query, and sorting
+  - **Update:**
+    - Rename file (`filename`)
+    - Update `alt` text
+  - **Delete:**
+    - Delete files by IDs
+  - **Delete Unused Images:**
+    - Find images with `used_in:none`
+    - `Dry Run` mode for safe preview before deletion
 
 ---
 

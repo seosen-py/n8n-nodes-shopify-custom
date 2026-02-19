@@ -7,6 +7,7 @@ export type ShopifyOperationValue =
 	| 'getMany'
 	| 'update'
 	| 'delete'
+	| 'deleteUnusedImages'
 	| 'set'
 	| 'list'
 	| 'listDefinitionTypes';
@@ -42,6 +43,10 @@ export type ShopifyOperationKey =
 	| 'draftOrder.getMany'
 	| 'draftOrder.update'
 	| 'draftOrder.delete'
+	| 'file.getMany'
+	| 'file.update'
+	| 'file.delete'
+	| 'file.deleteUnusedImages'
 	| 'metaobject.create'
 	| 'metaobject.get'
 	| 'metaobject.getMany'
