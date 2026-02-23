@@ -234,12 +234,37 @@ function getOperationParameters(
 	}
 
 	const parameters: IDataObject = {};
+	const getFallbackValue = (field: INodeProperties): unknown => {
+		if (field.default !== undefined) {
+			return field.default;
+		}
+
+		switch (field.type) {
+			case 'boolean':
+				return false;
+			case 'number':
+				return 0;
+			case 'multiOptions':
+				return [];
+			case 'collection':
+			case 'fixedCollection':
+				return {};
+			default:
+				return '';
+		}
+	};
+
 	for (const field of operationConfig.fields) {
-		parameters[field.name] = executeFunctions.getNodeParameter(
-			field.name,
-			itemIndex,
-			field.default,
-		) as never;
+		const fallbackValue = getFallbackValue(field);
+		try {
+			parameters[field.name] = executeFunctions.getNodeParameter(
+				field.name,
+				itemIndex,
+				fallbackValue as never,
+			) as never;
+		} catch {
+			parameters[field.name] = fallbackValue as never;
+		}
 	}
 
 	return parameters;
@@ -420,7 +445,11 @@ export class ShopifyCustom implements INodeType {
 	methods = {
 		loadOptions: {
 			async getMetafieldDefinitionTypes(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				return await getMetafieldDefinitionTypeOptions(this);
+				try {
+					return await getMetafieldDefinitionTypeOptions(this);
+				} catch {
+					return [];
+				}
 			},
 			async getMetafieldDefinitionsForCurrentContext(
 				this: ILoadOptionsFunctions,
@@ -446,31 +475,59 @@ export class ShopifyCustom implements INodeType {
 					return [];
 				}
 
-				return await getMetafieldDefinitionOptions(this, ownerType);
+				try {
+					return await getMetafieldDefinitionOptions(this, ownerType);
+				} catch {
+					return [];
+				}
 			},
 			async getReferenceOptions(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				return await getReferenceOptions(this);
+				try {
+					return await getReferenceOptions(this);
+				} catch {
+					return [];
+				}
 			},
 			async getCollectionNativeRuleTypeOptions(
 				this: ILoadOptionsFunctions,
 			): Promise<INodePropertyOptions[]> {
-				return await getCollectionNativeRuleTypeOptions(this);
+				try {
+					return await getCollectionNativeRuleTypeOptions(this);
+				} catch {
+					return [];
+				}
 			},
 			async getCollectionMetafieldRuleOptions(
 				this: ILoadOptionsFunctions,
 			): Promise<INodePropertyOptions[]> {
-				return await getCollectionMetafieldRuleOptions(this);
+				try {
+					return await getCollectionMetafieldRuleOptions(this);
+				} catch {
+					return [];
+				}
 			},
 			async getCollectionRuleRelationOptions(
 				this: ILoadOptionsFunctions,
 			): Promise<INodePropertyOptions[]> {
-				return await getCollectionRuleRelationOptions(this);
+				try {
+					return await getCollectionRuleRelationOptions(this);
+				} catch {
+					return [];
+				}
 			},
 			async getShopLocaleOptions(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				return await getShopLocaleOptions(this);
+				try {
+					return await getShopLocaleOptions(this);
+				} catch {
+					return [];
+				}
 			},
 			async getMarketOptions(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				return await getMarketOptions(this);
+				try {
+					return await getMarketOptions(this);
+				} catch {
+					return [];
+				}
 			},
 		},
 	};

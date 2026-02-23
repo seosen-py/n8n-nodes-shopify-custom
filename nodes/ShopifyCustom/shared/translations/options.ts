@@ -37,8 +37,28 @@ const MARKETS_CACHE = new Map<string, { expiresAt: number; data: IMarketNode[] }
 const TTL_MS = 2 * 60 * 1000;
 const FALLBACK_LOCALES = ['en', 'fr', 'de', 'es', 'it', 'pt-BR', 'uk'];
 
+function hasUsableCredentials(credentials: IDataObject): boolean {
+	const shopSubdomain = String(credentials.shopSubdomain ?? '').trim();
+	const accessToken = String(credentials.accessToken ?? '').trim();
+	return shopSubdomain.length > 0 && accessToken.length > 0;
+}
+
 function getCacheKey(credentials: IDataObject): string {
 	return `${String(credentials.shopSubdomain)}::${String(credentials.apiVersion ?? '2025-10')}`;
+}
+
+async function getCacheKeyFromCredentials(
+	context: ILoadOptionsFunctions,
+): Promise<string | undefined> {
+	try {
+		const credentials = (await context.getCredentials('shopifyCustomAdminApi')) as IDataObject;
+		if (!hasUsableCredentials(credentials)) {
+			return undefined;
+		}
+		return getCacheKey(credentials);
+	} catch {
+		return undefined;
+	}
 }
 
 function toLocaleLabel(locale: IShopLocale): string {
@@ -56,8 +76,14 @@ function toLocaleLabel(locale: IShopLocale): string {
 export async function getShopLocaleOptions(
 	context: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-	const credentials = (await context.getCredentials('shopifyCustomAdminApi')) as IDataObject;
-	const cacheKey = getCacheKey(credentials);
+	const cacheKey = await getCacheKeyFromCredentials(context);
+	if (!cacheKey) {
+		return FALLBACK_LOCALES.map((locale) => ({
+			name: locale,
+			value: locale,
+		}));
+	}
+
 	const now = Date.now();
 
 	const cacheEntry = LOCALES_CACHE.get(cacheKey);
@@ -103,8 +129,11 @@ export async function getShopLocaleOptions(
 export async function getMarketOptions(
 	context: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-	const credentials = (await context.getCredentials('shopifyCustomAdminApi')) as IDataObject;
-	const cacheKey = getCacheKey(credentials);
+	const cacheKey = await getCacheKeyFromCredentials(context);
+	if (!cacheKey) {
+		return [];
+	}
+
 	const now = Date.now();
 
 	const cacheEntry = MARKETS_CACHE.get(cacheKey);
