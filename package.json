@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-shopify-custom",
-	"version": "2.0.9",
+	"version": "2.0.10",
 	"description": "Shopify Admin GraphQL custom node for n8n with full metafield workflow",
 	"license": "MIT",
 	"homepage": "https://github.com/seosen-py/n8n-nodes-shopify-custom",
