@@ -418,6 +418,19 @@ async function runDeleteUnusedImagesOperation(
 	};
 }
 
+function safeGetNodeParameter<T>(
+	context: IExecuteFunctions,
+	name: string,
+	itemIndex: number,
+	defaultValue: T,
+): T {
+	try {
+		return context.getNodeParameter(name, itemIndex, defaultValue) as T;
+	} catch {
+		return defaultValue;
+	}
+}
+
 export class ShopifyCustom implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Shopify Custom',
@@ -538,14 +551,26 @@ export class ShopifyCustom implements INodeType {
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
 			try {
-				const resource = this.getNodeParameter('resource', itemIndex) as ShopifyResourceValue;
-				const operation = this.getNodeParameter('operation', itemIndex) as string;
-				const outputMode = this.getNodeParameter(
+				const resource = safeGetNodeParameter<ShopifyResourceValue>(
+					this,
+					'resource',
+					itemIndex,
+					'product',
+				);
+				const fallbackOperation = OPERATION_BY_RESOURCE[resource]?.[0]?.value ?? 'getMany';
+				const operation = safeGetNodeParameter<string>(
+					this,
+					'operation',
+					itemIndex,
+					fallbackOperation,
+				);
+				const outputMode = safeGetNodeParameter<ShopifyOutputMode>(
+					this,
 					'outputMode',
 					itemIndex,
 					'simplified',
-				) as ShopifyOutputMode;
-				const selectedFields = this.getNodeParameter('selectedFields', itemIndex, '') as string;
+				);
+				const selectedFields = safeGetNodeParameter<string>(this, 'selectedFields', itemIndex, '');
 
 				const operationConfig = getOperationConfig(resource, operation);
 				if (!operationConfig) {
@@ -572,18 +597,24 @@ export class ShopifyCustom implements INodeType {
 					}
 
 					if (operation === 'set') {
-						const collection = this.getNodeParameter('metafieldsSetItems', itemIndex, {}) as IDataObject;
+						const collection = safeGetNodeParameter<IDataObject>(
+							this,
+							'metafieldsSetItems',
+							itemIndex,
+							{},
+						);
 						operationParameters.metafieldsPayload = buildMetafieldsSetPayload(
 							'Shopify Custom',
 							ownerId,
 							collection,
 						);
 					} else if (operation === 'delete') {
-						const collection = this.getNodeParameter(
+						const collection = safeGetNodeParameter<IDataObject>(
+							this,
 							'metafieldsDeleteItems',
 							itemIndex,
 							{},
-						) as IDataObject;
+						);
 						operationParameters.metafieldsPayload = buildMetafieldsDeletePayload(
 							'Shopify Custom',
 							ownerId,
