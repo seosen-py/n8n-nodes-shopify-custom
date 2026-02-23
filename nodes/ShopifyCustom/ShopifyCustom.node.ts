@@ -35,6 +35,7 @@ import { getMetafieldDefinitionTypeOptions } from './shared/metafields/types';
 import { buildStandaloneMetafieldValueFields } from './shared/metafields/uiFactory';
 import { buildMetafieldsDeletePayload, buildMetafieldsSetPayload } from './shared/metafields/valuePayload';
 import { mapOutputItems, type ShopifyOutputMode } from './shared/output/outputMapper';
+import { getMarketOptions, getShopLocaleOptions } from './shared/translations/options';
 
 function isObject(value: unknown): value is IDataObject {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -464,6 +465,12 @@ export class ShopifyCustom implements INodeType {
 				this: ILoadOptionsFunctions,
 			): Promise<INodePropertyOptions[]> {
 				return await getCollectionRuleRelationOptions(this);
+			},
+			async getShopLocaleOptions(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				return await getShopLocaleOptions(this);
+			},
+			async getMarketOptions(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				return await getMarketOptions(this);
 			},
 		},
 	};

@@ -1,0 +1,163 @@
+import type { IDataObject, ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
+import { assertNoGraphQLErrors, executeShopifyGraphql } from '../graphql/client';
+import {
+	TRANSLATION_MARKETS_QUERY,
+	TRANSLATION_SHOP_LOCALES_QUERY,
+} from '../graphql/templates/translations';
+
+interface IShopLocale {
+	locale: string;
+	name: string;
+	primary: boolean;
+	published: boolean;
+}
+
+interface IShopLocalesResponse {
+	shopLocales: IShopLocale[];
+}
+
+interface IMarketNode {
+	id: string;
+	name: string;
+	status: string;
+}
+
+interface IMarketsResponse {
+	markets: {
+		nodes: IMarketNode[];
+		pageInfo: {
+			hasNextPage: boolean;
+			endCursor?: string | null;
+		};
+	};
+}
+
+const LOCALES_CACHE = new Map<string, { expiresAt: number; data: IShopLocale[] }>();
+const MARKETS_CACHE = new Map<string, { expiresAt: number; data: IMarketNode[] }>();
+const TTL_MS = 2 * 60 * 1000;
+const FALLBACK_LOCALES = ['en', 'fr', 'de', 'es', 'it', 'pt-BR', 'uk'];
+
+function getCacheKey(credentials: IDataObject): string {
+	return `${String(credentials.shopSubdomain)}::${String(credentials.apiVersion ?? '2025-10')}`;
+}
+
+function toLocaleLabel(locale: IShopLocale): string {
+	const suffixParts: string[] = [];
+	if (locale.primary) {
+		suffixParts.push('Primary');
+	}
+	if (!locale.published) {
+		suffixParts.push('Unpublished');
+	}
+	const suffix = suffixParts.length > 0 ? ` [${suffixParts.join(', ')}]` : '';
+	return `${locale.name} (${locale.locale})${suffix}`;
+}
+
+export async function getShopLocaleOptions(
+	context: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const credentials = (await context.getCredentials('shopifyCustomAdminApi')) as IDataObject;
+	const cacheKey = getCacheKey(credentials);
+	const now = Date.now();
+
+	const cacheEntry = LOCALES_CACHE.get(cacheKey);
+	if (cacheEntry && cacheEntry.expiresAt > now) {
+		return cacheEntry.data
+			.map((locale) => ({
+				name: toLocaleLabel(locale),
+				value: locale.locale,
+			}))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	let locales: IShopLocale[] = [];
+	try {
+		const response = await executeShopifyGraphql<IShopLocalesResponse>(
+			context,
+			TRANSLATION_SHOP_LOCALES_QUERY,
+			{},
+			0,
+		);
+		assertNoGraphQLErrors(context, response, 0);
+		locales = response.data?.shopLocales ?? [];
+	} catch {
+		return FALLBACK_LOCALES.map((locale) => ({
+			name: locale,
+			value: locale,
+		}));
+	}
+
+	LOCALES_CACHE.set(cacheKey, {
+		expiresAt: now + TTL_MS,
+		data: locales,
+	});
+
+	return locales
+		.map((locale) => ({
+			name: toLocaleLabel(locale),
+			value: locale.locale,
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getMarketOptions(
+	context: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const credentials = (await context.getCredentials('shopifyCustomAdminApi')) as IDataObject;
+	const cacheKey = getCacheKey(credentials);
+	const now = Date.now();
+
+	const cacheEntry = MARKETS_CACHE.get(cacheKey);
+	if (cacheEntry && cacheEntry.expiresAt > now) {
+		return cacheEntry.data
+			.map((market) => ({
+				name: `${market.name} (${market.status})`,
+				value: market.id,
+			}))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	const markets: IMarketNode[] = [];
+	let after: string | undefined;
+
+	try {
+		for (let page = 0; page < 10; page += 1) {
+			const response = await executeShopifyGraphql<IMarketsResponse>(
+				context,
+				TRANSLATION_MARKETS_QUERY,
+				{
+					first: 100,
+					after,
+				},
+				0,
+			);
+			assertNoGraphQLErrors(context, response, 0);
+
+			const connection = response.data?.markets;
+			if (!connection) {
+				break;
+			}
+
+			markets.push(...(connection.nodes ?? []));
+			if (!connection.pageInfo?.hasNextPage || !connection.pageInfo?.endCursor) {
+				break;
+			}
+
+			after = connection.pageInfo.endCursor;
+		}
+	} catch {
+		return [];
+	}
+
+	MARKETS_CACHE.set(cacheKey, {
+		expiresAt: now + TTL_MS,
+		data: markets,
+	});
+
+	return markets
+		.map((market) => ({
+			name: `${market.name} (${market.status})`,
+			value: market.id,
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
+}

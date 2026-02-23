@@ -11,6 +11,7 @@ import { ORDER_OPERATION_CONFIGS } from './order';
 import { PRODUCT_OPERATION_CONFIGS } from './product';
 import { PRODUCT_VARIANT_OPERATION_CONFIGS } from './productVariant';
 import { SERVICE_OPERATION_CONFIGS } from './service';
+import { TRANSLATION_OPERATION_CONFIGS } from './translation';
 import type { IShopifyOperationConfig } from './types';
 
 export const SHOPIFY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
@@ -21,6 +22,7 @@ export const SHOPIFY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 	...ORDER_OPERATION_CONFIGS,
 	...DRAFT_ORDER_OPERATION_CONFIGS,
 	...FILE_OPERATION_CONFIGS,
+	...TRANSLATION_OPERATION_CONFIGS,
 	...METAOBJECT_OPERATION_CONFIGS,
 	...METAFIELD_VALUE_OPERATION_CONFIGS,
 	...METAFIELD_DEFINITION_OPERATION_CONFIGS,

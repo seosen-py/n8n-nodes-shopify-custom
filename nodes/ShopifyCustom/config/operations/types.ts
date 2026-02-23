@@ -9,6 +9,8 @@ export type ShopifyOperationValue =
 	| 'delete'
 	| 'deleteUnusedImages'
 	| 'set'
+	| 'register'
+	| 'remove'
 	| 'list'
 	| 'listDefinitionTypes';
 
@@ -47,6 +49,10 @@ export type ShopifyOperationKey =
 	| 'file.update'
 	| 'file.delete'
 	| 'file.deleteUnusedImages'
+	| 'translation.get'
+	| 'translation.getMany'
+	| 'translation.register'
+	| 'translation.remove'
 	| 'metaobject.create'
 	| 'metaobject.get'
 	| 'metaobject.getMany'

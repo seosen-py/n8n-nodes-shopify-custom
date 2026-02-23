@@ -26,6 +26,12 @@ import {
 	FILE_UPDATE_MUTATION,
 } from './templates/file';
 import {
+	TRANSLATION_GET_MANY_QUERY,
+	TRANSLATION_GET_QUERY,
+	TRANSLATION_REGISTER_MUTATION,
+	TRANSLATION_REMOVE_MUTATION,
+} from './templates/translations';
+import {
 	METAFIELD_DEFINITION_CREATE_MUTATION,
 	METAFIELD_DEFINITION_DELETE_MUTATION,
 	METAFIELD_DEFINITION_GET_QUERY,
@@ -570,6 +576,77 @@ function parseFileIds(value: unknown): string[] | undefined {
 	return ids.length > 0 ? Array.from(new Set(ids)) : undefined;
 }
 
+function parseTranslationRegisterItems(value: unknown): IDataObject[] | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const translations = value.items
+		.filter(isObject)
+		.map((item) => {
+			const locale = asString(item.locale);
+			const key = asString(item.key);
+			const translationValue = asString(item.value);
+			const translatableContentDigest = asString(item.translatableContentDigest);
+			const marketId = asString(item.marketId);
+
+			if (!locale || !key || translationValue === undefined || !translatableContentDigest) {
+				return undefined;
+			}
+
+			return {
+				locale,
+				key,
+				value: translationValue,
+				translatableContentDigest,
+				marketId: marketId || undefined,
+			} as IDataObject;
+		})
+		.filter((item): item is IDataObject => item !== undefined);
+
+	return translations.length > 0 ? translations : undefined;
+}
+
+function parseTranslationKeys(value: unknown): string[] | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const keys = value.items
+		.filter(isObject)
+		.map((item) => asString(item.key))
+		.filter((item): item is string => !!item);
+
+	return keys.length > 0 ? Array.from(new Set(keys)) : undefined;
+}
+
+function parseStringArray(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) {
+		return undefined;
+	}
+
+	const normalized = value
+		.map((item) => asString(item))
+		.filter((item): item is string => !!item);
+
+	return normalized.length > 0 ? Array.from(new Set(normalized)) : undefined;
+}
+
+function getTranslationOptions(parameters: IDataObject): IDataObject {
+	if (isObject(parameters.translationOptions)) {
+		return parameters.translationOptions;
+	}
+	return {};
+}
+
+function getTranslationOutdatedFilter(options: IDataObject): boolean | undefined {
+	const hasFilter = asBoolean(options.filterByOutdated);
+	if (!hasFilter) {
+		return undefined;
+	}
+	return asBoolean(options.outdated);
+}
+
 function buildFileSearchQuery(baseQuery: string | undefined, options: IDataObject): string | undefined {
 	const terms: string[] = [];
 
@@ -1075,6 +1152,72 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		pagination: {
 			connectionPath: ['files'],
 		},
+	},
+	'translation.get': {
+		document: TRANSLATION_GET_QUERY,
+		buildVariables: (parameters) => {
+			const options = getTranslationOptions(parameters);
+			return {
+				resourceId: asString(parameters.resourceId),
+				locale: asString(parameters.locale),
+				marketId: asString(options.marketId),
+				outdated: getTranslationOutdatedFilter(options),
+				includeNestedResources: Boolean(options.includeNestedResources),
+				nestedResourceType: asString(options.nestedResourceType),
+				nestedFirst: Math.max(1, Math.trunc(asNumber(options.nestedLimit) ?? 50)),
+			};
+		},
+		mapSimplified: (data) => mapSingleNode(data, ['translatableResource']),
+	},
+	'translation.getMany': {
+		document: TRANSLATION_GET_MANY_QUERY,
+		buildVariables: (parameters) => {
+			const options = getTranslationOptions(parameters);
+			const limit = asNumber(parameters.limit) ?? 50;
+			return {
+				resourceType: asString(parameters.resourceType),
+				first: Math.max(1, Math.trunc(limit)),
+				after: asString(options.afterCursor),
+				reverse: asBoolean(options.reverse),
+				locale: asString(parameters.locale),
+				marketId: asString(options.marketId),
+				outdated: getTranslationOutdatedFilter(options),
+			};
+		},
+		mapSimplified: (data) => mapNodesFromConnection(data, ['translatableResources']),
+		pagination: {
+			connectionPath: ['translatableResources'],
+		},
+	},
+	'translation.register': {
+		document: TRANSLATION_REGISTER_MUTATION,
+		buildVariables: (parameters) => ({
+			resourceId: asString(parameters.resourceId),
+			translations: parseTranslationRegisterItems(parameters.translationsInput) ?? [],
+		}),
+		mapSimplified: (data) =>
+			Array.isArray(getPathValue(data, ['translationsRegister', 'translations']))
+				? (getPathValue(data, ['translationsRegister', 'translations']) as unknown[])
+						.filter(isObject)
+						.map((item) => ({ ...item }))
+				: [],
+		getUserErrors: (data) => parseUserErrors(data, ['translationsRegister']),
+	},
+	'translation.remove': {
+		document: TRANSLATION_REMOVE_MUTATION,
+		buildVariables: (parameters) => ({
+			resourceId: asString(parameters.resourceId),
+			translationKeys: parseTranslationKeys(parameters.translationKeysInput) ?? [],
+			locales: parseStringArray(parameters.locales) ?? [],
+			marketIds: parseStringArray(parameters.marketIds),
+		}),
+		mapSimplified: (data) =>
+			Array.isArray(getPathValue(data, ['translationsRemove', 'translations']))
+				? (getPathValue(data, ['translationsRemove', 'translations']) as unknown[])
+						.filter(isObject)
+						.map((item) => ({ ...item }))
+				: [],
+		getUserErrors: (data) => parseUserErrors(data, ['translationsRemove']),
 	},
 	'metaobject.create': {
 		document: METAOBJECT_CREATE_MUTATION,
