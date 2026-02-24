@@ -153,8 +153,8 @@ mutation TranslationRemove(
 `;
 
 export const TRANSLATION_SHOP_LOCALES_QUERY = `
-query TranslationShopLocales {
-	shopLocales {
+query TranslationShopLocales($published: Boolean) {
+	shopLocales(published: $published) {
 		locale
 		name
 		primary
@@ -174,6 +174,22 @@ query TranslationMarkets($first: Int!, $after: String) {
 		pageInfo {
 			hasNextPage
 			endCursor
+		}
+	}
+}
+`;
+
+export const TRANSLATION_MARKETS_FROM_LOCALES_QUERY = `
+query TranslationMarketsFromLocales($published: Boolean) {
+	shopLocales(published: $published) {
+		marketWebPresences {
+			markets(first: 50) {
+				nodes {
+					id
+					name
+					status
+				}
+			}
 		}
 	}
 }

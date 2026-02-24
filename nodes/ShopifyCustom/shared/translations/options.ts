@@ -1,6 +1,7 @@
 import type { IDataObject, ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
 import { assertNoGraphQLErrors, executeShopifyGraphql } from '../graphql/client';
 import {
+	TRANSLATION_MARKETS_FROM_LOCALES_QUERY,
 	TRANSLATION_MARKETS_QUERY,
 	TRANSLATION_SHOP_LOCALES_QUERY,
 } from '../graphql/templates/translations';
@@ -32,10 +33,24 @@ interface IMarketsResponse {
 	};
 }
 
+interface IMarketWebPresence {
+	markets?: {
+		nodes?: IMarketNode[];
+	};
+}
+
+interface IShopLocaleWithMarkets {
+	marketWebPresences?: IMarketWebPresence[];
+}
+
+interface IMarketsFromLocalesResponse {
+	shopLocales: IShopLocaleWithMarkets[];
+}
+
 const LOCALES_CACHE = new Map<string, { expiresAt: number; data: IShopLocale[] }>();
 const MARKETS_CACHE = new Map<string, { expiresAt: number; data: IMarketNode[] }>();
 const TTL_MS = 2 * 60 * 1000;
-const FALLBACK_LOCALES = ['en', 'fr', 'de', 'es', 'it', 'pt-BR', 'uk'];
+const FALLBACK_LOCALES = ['en', 'fr', 'de', 'es', 'it', 'pt-BR', 'uk', 'ru'];
 
 function hasUsableCredentials(credentials: IDataObject): boolean {
 	const shopSubdomain = String(credentials.shopSubdomain ?? '').trim();
@@ -73,6 +88,42 @@ function toLocaleLabel(locale: IShopLocale): string {
 	return `${locale.name} (${locale.locale})${suffix}`;
 }
 
+function dedupeLocales(locales: IShopLocale[]): IShopLocale[] {
+	const uniqueLocales = new Map<string, IShopLocale>();
+	for (const locale of locales) {
+		if (!locale.locale) {
+			continue;
+		}
+
+		const existing = uniqueLocales.get(locale.locale);
+		if (!existing) {
+			uniqueLocales.set(locale.locale, locale);
+			continue;
+		}
+
+		uniqueLocales.set(locale.locale, {
+			locale: locale.locale,
+			name: locale.name || existing.name,
+			primary: locale.primary || existing.primary,
+			published: locale.published || existing.published,
+		});
+	}
+	return Array.from(uniqueLocales.values());
+}
+
+function dedupeMarkets(markets: IMarketNode[]): IMarketNode[] {
+	const uniqueMarkets = new Map<string, IMarketNode>();
+	for (const market of markets) {
+		if (!market.id) {
+			continue;
+		}
+		if (!uniqueMarkets.has(market.id)) {
+			uniqueMarkets.set(market.id, market);
+		}
+	}
+	return Array.from(uniqueMarkets.values());
+}
+
 export async function getShopLocaleOptions(
 	context: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
@@ -98,14 +149,30 @@ export async function getShopLocaleOptions(
 
 	let locales: IShopLocale[] = [];
 	try {
-		const response = await executeShopifyGraphql<IShopLocalesResponse>(
+		const publishedLocalesResponse = await executeShopifyGraphql<IShopLocalesResponse>(
 			context,
 			TRANSLATION_SHOP_LOCALES_QUERY,
-			{},
+			{
+				published: true,
+			},
 			0,
 		);
-		assertNoGraphQLErrors(context, response, 0);
-		locales = response.data?.shopLocales ?? [];
+		assertNoGraphQLErrors(context, publishedLocalesResponse, 0);
+
+		const unpublishedLocalesResponse = await executeShopifyGraphql<IShopLocalesResponse>(
+			context,
+			TRANSLATION_SHOP_LOCALES_QUERY,
+			{
+				published: false,
+			},
+			0,
+		);
+		assertNoGraphQLErrors(context, unpublishedLocalesResponse, 0);
+
+		locales = dedupeLocales([
+			...(publishedLocalesResponse.data?.shopLocales ?? []),
+			...(unpublishedLocalesResponse.data?.shopLocales ?? []),
+		]);
 	} catch {
 		return FALLBACK_LOCALES.map((locale) => ({
 			name: locale,
@@ -175,15 +242,56 @@ export async function getMarketOptions(
 			after = connection.pageInfo.endCursor;
 		}
 	} catch {
-		return [];
+		const fallbackMarkets: IMarketNode[] = [];
+		try {
+			for (const published of [true, false]) {
+				const response = await executeShopifyGraphql<IMarketsFromLocalesResponse>(
+					context,
+					TRANSLATION_MARKETS_FROM_LOCALES_QUERY,
+					{ published },
+					0,
+				);
+				assertNoGraphQLErrors(context, response, 0);
+
+				const shopLocales = response.data?.shopLocales ?? [];
+				for (const locale of shopLocales) {
+					const webPresences = Array.isArray(locale.marketWebPresences)
+						? locale.marketWebPresences
+						: [];
+					for (const webPresence of webPresences) {
+						const nodes = Array.isArray(webPresence.markets?.nodes)
+							? webPresence.markets?.nodes
+							: [];
+						fallbackMarkets.push(...nodes);
+					}
+				}
+			}
+		} catch {
+			return [];
+		}
+
+		const dedupedFallbackMarkets = dedupeMarkets(fallbackMarkets);
+		MARKETS_CACHE.set(cacheKey, {
+			expiresAt: now + TTL_MS,
+			data: dedupedFallbackMarkets,
+		});
+
+		return dedupedFallbackMarkets
+			.map((market) => ({
+				name: `${market.name} (${market.status})`,
+				value: market.id,
+			}))
+			.sort((a, b) => a.name.localeCompare(b.name));
 	}
+
+	const dedupedMarkets = dedupeMarkets(markets);
 
 	MARKETS_CACHE.set(cacheKey, {
 		expiresAt: now + TTL_MS,
-		data: markets,
+		data: dedupedMarkets,
 	});
 
-	return markets
+	return dedupedMarkets
 		.map((market) => ({
 			name: `${market.name} (${market.status})`,
 			value: market.id,
