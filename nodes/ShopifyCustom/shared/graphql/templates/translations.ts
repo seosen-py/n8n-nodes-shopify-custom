@@ -50,6 +50,9 @@ query TranslationGet(
 		) @include(if: $includeNestedResources) {
 			nodes {
 				resourceId
+				translatableContent(marketId: $marketId) {
+					${TRANSLATABLE_CONTENT_FIELDS}
+				}
 				translations(locale: $locale, marketId: $marketId, outdated: $outdated) {
 					${TRANSLATION_FIELDS}
 				}
@@ -72,6 +75,9 @@ query TranslationGetMany(
 	$locale: String!
 	$marketId: ID
 	$outdated: Boolean
+	$includeNestedResources: Boolean!
+	$nestedResourceType: TranslatableResourceType
+	$nestedFirst: Int!
 ) {
 	translatableResources(
 		resourceType: $resourceType
@@ -86,6 +92,24 @@ query TranslationGetMany(
 			}
 			translations(locale: $locale, marketId: $marketId, outdated: $outdated) {
 				${TRANSLATION_FIELDS}
+			}
+			nestedTranslatableResources(
+				resourceType: $nestedResourceType
+				first: $nestedFirst
+			) @include(if: $includeNestedResources) {
+				nodes {
+					resourceId
+					translatableContent(marketId: $marketId) {
+						${TRANSLATABLE_CONTENT_FIELDS}
+					}
+					translations(locale: $locale, marketId: $marketId, outdated: $outdated) {
+						${TRANSLATION_FIELDS}
+					}
+				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
 			}
 		}
 		pageInfo {
@@ -154,4 +178,3 @@ query TranslationMarkets($first: Int!, $after: String) {
 	}
 }
 `;
-

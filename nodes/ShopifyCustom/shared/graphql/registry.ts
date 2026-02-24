@@ -1182,6 +1182,9 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 				locale: asString(parameters.locale),
 				marketId: asString(options.marketId),
 				outdated: getTranslationOutdatedFilter(options),
+				includeNestedResources: Boolean(options.includeNestedResources),
+				nestedResourceType: asString(options.nestedResourceType),
+				nestedFirst: Math.max(1, Math.trunc(asNumber(options.nestedLimit) ?? 50)),
 			};
 		},
 		mapSimplified: (data) => mapNodesFromConnection(data, ['translatableResources']),

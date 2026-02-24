@@ -293,7 +293,40 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						type: 'boolean',
 						default: false,
 					},
+					{
+						displayName: 'Include Nested Resources',
+						name: 'includeNestedResources',
+						type: 'boolean',
+						default: false,
+					},
 					MARKET_ID_FIELD,
+					{
+						displayName: 'Nested Limit',
+						name: 'nestedLimit',
+						type: 'number',
+						default: 50,
+						typeOptions: {
+							minValue: 1,
+							maxValue: 250,
+						},
+						displayOptions: {
+							show: {
+								includeNestedResources: [true],
+							},
+						},
+					},
+					{
+						displayName: 'Nested Resource Type',
+						name: 'nestedResourceType',
+						type: 'options',
+						options: TRANSLATABLE_RESOURCE_TYPE_OPTIONS,
+						default: 'METAFIELD',
+						displayOptions: {
+							show: {
+								includeNestedResources: [true],
+							},
+						},
+					},
 					{
 						displayName: 'Outdated',
 						name: 'outdated',
