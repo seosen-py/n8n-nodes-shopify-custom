@@ -550,6 +550,8 @@ export class ShopifyCustom implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+			let currentResource: ShopifyResourceValue = 'product';
+			let currentOperation = 'getMany';
 			try {
 				const resource = safeGetNodeParameter<ShopifyResourceValue>(
 					this,
@@ -557,6 +559,7 @@ export class ShopifyCustom implements INodeType {
 					itemIndex,
 					'product',
 				);
+				currentResource = resource;
 				const fallbackOperation = OPERATION_BY_RESOURCE[resource]?.[0]?.value ?? 'getMany';
 				const operation = safeGetNodeParameter<string>(
 					this,
@@ -564,6 +567,7 @@ export class ShopifyCustom implements INodeType {
 					itemIndex,
 					fallbackOperation,
 				);
+				currentOperation = operation;
 				const outputMode = safeGetNodeParameter<ShopifyOutputMode>(
 					this,
 					'outputMode',
@@ -649,6 +653,15 @@ export class ShopifyCustom implements INodeType {
 				);
 				returnData.push(...this.helpers.returnJsonArray(outputItems));
 			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				if (/Could not get parameter/i.test(errorMessage)) {
+					throw new NodeOperationError(
+						this.getNode(),
+						`Could not read one of the node parameters while executing "${currentResource} -> ${currentOperation}". Reopen the node, reselect the operation, save, and run again. If the issue persists, update the installed node package to the latest version.`,
+						{ itemIndex },
+					);
+				}
+
 				if (this.continueOnFail()) {
 					returnData.push({
 						json: {
