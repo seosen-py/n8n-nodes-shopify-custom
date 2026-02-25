@@ -190,18 +190,18 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						default: false,
 					},
 					{
-						displayName: 'Include Nested Resources',
-						name: 'includeNestedResources',
-						type: 'boolean',
-						default: false,
-					},
-					{
 						displayName: 'Include Metafield Metadata',
 						name: 'includeMetafieldMetadata',
 						type: 'boolean',
 						default: false,
 						description:
-							'For Metafield resource IDs, enriches output with namespace, key, definition name, and owner',
+							'Whether to enrich Metafield resource IDs with namespace, key, definition name, and owner',
+					},
+					{
+						displayName: 'Include Nested Resources',
+						name: 'includeNestedResources',
+						type: 'boolean',
+						default: false,
 					},
 					MARKET_ID_FIELD,
 					{
@@ -306,18 +306,18 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						default: false,
 					},
 					{
-						displayName: 'Include Nested Resources',
-						name: 'includeNestedResources',
-						type: 'boolean',
-						default: false,
-					},
-					{
 						displayName: 'Include Metafield Metadata',
 						name: 'includeMetafieldMetadata',
 						type: 'boolean',
 						default: false,
 						description:
-							'For Metafield resource IDs, enriches output with namespace, key, definition name, and owner',
+							'Whether to enrich Metafield resource IDs with namespace, key, definition name, and owner',
+					},
+					{
+						displayName: 'Include Nested Resources',
+						name: 'includeNestedResources',
+						type: 'boolean',
+						default: false,
 					},
 					MARKET_ID_FIELD,
 					{

@@ -538,7 +538,7 @@ async function maybeEnrichTranslationMetafieldMetadata(
 	const translationOptions = isObject(operationParameters.translationOptions)
 		? operationParameters.translationOptions
 		: undefined;
-	if (!translationOptions || !Boolean(translationOptions.includeMetafieldMetadata)) {
+	if (!translationOptions || !translationOptions.includeMetafieldMetadata) {
 		return mainResult;
 	}
 
