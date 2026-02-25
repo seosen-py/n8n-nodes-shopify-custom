@@ -48,6 +48,7 @@ The single node **`Shopify Custom`** includes resource-based actions:
 | Order | ✔ |
 | Draft Order | ✔ |
 | File | ✔ |
+| Translation | ✔ |
 | Metaobject | ✔ |
 | Metafield Value | ✔ |
 | Metafield Definition | ✔ |
@@ -143,6 +144,19 @@ Most resources support:
     - Delete a definition
     - Optional delete of all associated metafield values
 
+- **Translation:**
+  - **Get / Get Many:**
+    - Read translatable content (`key`, `digest`) and existing translations
+    - Supports locale and optional market filtering
+  - **Register / Remove:**
+    - Create or update translations with `translationsRegister`
+    - Delete translations by key + locale (+ optional market IDs)
+  - **Metafield workflow (important):**
+    - Use the metafield ID as `resourceId` (`gid://shopify/Metafield/{id}`)
+    - First run **Translation → Get** and copy `digest` from `translatableContent`
+    - For metafields, use translation `key` = `value`
+    - Register with the same key + digest; if original metafield value changes, fetch a new digest before next register
+
 - **Metaobjects:**
   - **Get / Get Many:**
     - Get a single metaobject or a list by type
@@ -216,6 +230,7 @@ To use the node, create a Shopify **Custom App**:
 * read_draft_orders, write_draft_orders
 * read_metaobjects, write_metaobjects
 * read_metaobject_definitions, write_metaobject_definitions
+* read_translations, write_translations
 
 Optional (historical orders):
 

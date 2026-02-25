@@ -89,7 +89,7 @@ const REGISTER_TRANSLATIONS_FIELD: INodeProperties = {
 					default: '',
 					required: true,
 					description:
-						'Translatable field key. Use Translation -> Get to read available keys and digests first.',
+						'Translatable field key. Use Translation -> Get to read available keys and digests first. For METAFIELD resources, use key "value".',
 				},
 				{
 					displayName: 'Locale Name or ID',
@@ -170,7 +170,11 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		description: 'Get translatable content and translations for one resource',
 		registryKey: 'translation.get',
 		fields: [
-			gidField('resourceId', 'Resource ID', 'Global Shopify ID of the translatable resource'),
+			gidField(
+				'resourceId',
+				'Resource ID',
+				'Global Shopify ID of the translatable resource (for metafields use gid://shopify/Metafield/{id})',
+			),
 			LOCALE_FIELD,
 			{
 				displayName: 'Options',
@@ -190,6 +194,14 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						name: 'includeNestedResources',
 						type: 'boolean',
 						default: false,
+					},
+					{
+						displayName: 'Include Metafield Metadata',
+						name: 'includeMetafieldMetadata',
+						type: 'boolean',
+						default: false,
+						description:
+							'For Metafield resource IDs, enriches output with namespace, key, definition name, and owner',
 					},
 					MARKET_ID_FIELD,
 					{
@@ -299,6 +311,14 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						type: 'boolean',
 						default: false,
 					},
+					{
+						displayName: 'Include Metafield Metadata',
+						name: 'includeMetafieldMetadata',
+						type: 'boolean',
+						default: false,
+						description:
+							'For Metafield resource IDs, enriches output with namespace, key, definition name, and owner',
+					},
 					MARKET_ID_FIELD,
 					{
 						displayName: 'Nested Limit',
@@ -355,7 +375,11 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		description: 'Create or update translations for a resource',
 		registryKey: 'translation.register',
 		fields: [
-			gidField('resourceId', 'Resource ID', 'Global Shopify ID of the translatable resource'),
+			gidField(
+				'resourceId',
+				'Resource ID',
+				'Global Shopify ID of the translatable resource (for metafields use gid://shopify/Metafield/{id})',
+			),
 			REGISTER_TRANSLATIONS_FIELD,
 		],
 	},
@@ -366,7 +390,11 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		description: 'Delete translations by keys/locales',
 		registryKey: 'translation.remove',
 		fields: [
-			gidField('resourceId', 'Resource ID', 'Global Shopify ID of the translatable resource'),
+			gidField(
+				'resourceId',
+				'Resource ID',
+				'Global Shopify ID of the translatable resource (for metafields use gid://shopify/Metafield/{id})',
+			),
 			{
 				displayName: 'Locale Names or IDs',
 				name: 'locales',

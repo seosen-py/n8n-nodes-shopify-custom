@@ -431,6 +431,143 @@ function safeGetNodeParameter<T>(
 	}
 }
 
+function collectMetafieldResourceIds(payload: unknown): string[] {
+	const ids = new Set<string>();
+	const queue: unknown[] = [payload];
+
+	while (queue.length > 0) {
+		const current = queue.pop();
+		if (Array.isArray(current)) {
+			queue.push(...current);
+			continue;
+		}
+		if (!isObject(current)) {
+			continue;
+		}
+
+		const resourceId = current.resourceId;
+		if (
+			typeof resourceId === 'string' &&
+			resourceId.startsWith('gid://shopify/Metafield/')
+		) {
+			ids.add(resourceId);
+		}
+
+		for (const value of Object.values(current)) {
+			if (value && typeof value === 'object') {
+				queue.push(value);
+			}
+		}
+	}
+
+	return Array.from(ids);
+}
+
+function buildMetafieldMetadataMap(payload: unknown): Map<string, IDataObject> {
+	const metadataMap = new Map<string, IDataObject>();
+	if (!Array.isArray(payload)) {
+		return metadataMap;
+	}
+
+	for (const item of payload) {
+		if (!isObject(item)) {
+			continue;
+		}
+		const id = item.id;
+		if (typeof id !== 'string' || !id) {
+			continue;
+		}
+		metadataMap.set(id, item);
+	}
+
+	return metadataMap;
+}
+
+function enrichTranslationsWithMetafieldMetadata(
+	payload: unknown,
+	metadataById: Map<string, IDataObject>,
+): unknown {
+	if (Array.isArray(payload)) {
+		return payload.map((item) => enrichTranslationsWithMetafieldMetadata(item, metadataById));
+	}
+
+	if (!isObject(payload)) {
+		return payload;
+	}
+
+	const enriched: IDataObject = {};
+	for (const [key, value] of Object.entries(payload)) {
+		if (Array.isArray(value) || isObject(value)) {
+			enriched[key] = enrichTranslationsWithMetafieldMetadata(value, metadataById) as never;
+			continue;
+		}
+		enriched[key] = value as never;
+	}
+
+	const resourceId = payload.resourceId;
+	if (typeof resourceId === 'string') {
+		const metadata = metadataById.get(resourceId);
+		if (metadata) {
+			enriched.metafieldMetadata = metadata;
+		}
+	}
+
+	return enriched;
+}
+
+function mapMetafieldMetadataById(metadataById: Map<string, IDataObject>): IDataObject {
+	const result: IDataObject = {};
+	for (const [id, metadata] of metadataById) {
+		result[id] = metadata;
+	}
+	return result;
+}
+
+async function maybeEnrichTranslationMetafieldMetadata(
+	executeFunctions: IExecuteFunctions,
+	resource: ShopifyResourceValue,
+	operation: string,
+	operationParameters: IDataObject,
+	mainResult: { simplified: unknown; raw: IDataObject },
+	itemIndex: number,
+): Promise<{ simplified: unknown; raw: IDataObject }> {
+	if (resource !== 'translation' || (operation !== 'get' && operation !== 'getMany')) {
+		return mainResult;
+	}
+
+	const translationOptions = isObject(operationParameters.translationOptions)
+		? operationParameters.translationOptions
+		: undefined;
+	if (!translationOptions || !Boolean(translationOptions.includeMetafieldMetadata)) {
+		return mainResult;
+	}
+
+	const metafieldIds = collectMetafieldResourceIds(mainResult.simplified);
+	if (metafieldIds.length === 0) {
+		return mainResult;
+	}
+
+	const metadataResult = await runRegistryOperation(
+		executeFunctions,
+		'metafieldValue.resolveMetadata',
+		{ metafieldIds },
+		itemIndex,
+	);
+	const metadataById = buildMetafieldMetadataMap(metadataResult.simplified);
+	if (metadataById.size === 0) {
+		return mainResult;
+	}
+
+	return {
+		simplified: enrichTranslationsWithMetafieldMetadata(mainResult.simplified, metadataById),
+		raw: {
+			...mainResult.raw,
+			metafieldMetadataById: mapMetafieldMetadataById(metadataById),
+			metafieldMetadataLookup: metadataResult.raw,
+		},
+	};
+}
+
 export class ShopifyCustom implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Shopify Custom',
@@ -644,11 +781,19 @@ export class ShopifyCustom implements INodeType {
 								operationParameters,
 								itemIndex,
 							);
+				const resultWithTranslationMetadata = await maybeEnrichTranslationMetafieldMetadata(
+					this,
+					resource,
+					operation,
+					operationParameters,
+					mainResult,
+					itemIndex,
+				);
 
 				const outputItems = mapOutputItems(
 					outputMode,
-					mainResult.simplified,
-					mainResult.raw,
+					resultWithTranslationMetadata.simplified,
+					resultWithTranslationMetadata.raw,
 					selectedFields,
 				);
 				returnData.push(...this.helpers.returnJsonArray(outputItems));

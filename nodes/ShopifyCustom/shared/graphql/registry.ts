@@ -41,6 +41,7 @@ import {
 	METAFIELD_DELETE_MUTATION,
 	METAFIELD_GET_MANY_QUERY,
 	METAFIELD_GET_QUERY,
+	METAFIELD_RESOLVE_METADATA_QUERY,
 	METAFIELD_SET_MUTATION,
 } from './templates/metafields';
 import {
@@ -571,6 +572,26 @@ function parseFileIds(value: unknown): string[] | undefined {
 	const ids = value.items
 		.filter(isObject)
 		.map((item) => asString(item.fileId))
+		.filter((item): item is string => !!item);
+
+	return ids.length > 0 ? Array.from(new Set(ids)) : undefined;
+}
+
+function parseMetafieldIds(value: unknown): string[] | undefined {
+	if (Array.isArray(value)) {
+		const idsFromArray = value
+			.map((item) => asString(item))
+			.filter((item): item is string => !!item);
+		return idsFromArray.length > 0 ? Array.from(new Set(idsFromArray)) : undefined;
+	}
+
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const ids = value.items
+		.filter(isObject)
+		.map((item) => asString(item.metafieldId))
 		.filter((item): item is string => !!item);
 
 	return ids.length > 0 ? Array.from(new Set(ids)) : undefined;
@@ -1324,6 +1345,51 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		},
 		pagination: {
 			connectionPath: ['nodes', '0', 'metafields'],
+		},
+	},
+	'metafieldValue.resolveMetadata': {
+		document: METAFIELD_RESOLVE_METADATA_QUERY,
+		buildVariables: (parameters) => ({
+			ids: parseMetafieldIds(parameters.metafieldResolveItems ?? parameters.metafieldIds) ?? [],
+		}),
+		mapSimplified: (data) => {
+			const nodes = getPathValue(data, ['nodes']);
+			if (!Array.isArray(nodes)) {
+				return [];
+			}
+
+			return nodes
+				.filter(isObject)
+				.map((node) => {
+					const id = asString(node.id);
+					if (!id) {
+						return undefined;
+					}
+
+					const definition = isObject(node.definition)
+						? {
+								id: asString((node.definition as IDataObject).id),
+								name: asString((node.definition as IDataObject).name),
+							}
+						: undefined;
+					const owner = isObject(node.owner)
+						? {
+								id: asString((node.owner as IDataObject).id),
+								type: asString((node.owner as IDataObject).__typename),
+							}
+						: undefined;
+
+					return {
+						id,
+						namespace: asString(node.namespace),
+						key: asString(node.key),
+						type: asString(node.type),
+						updatedAt: asString(node.updatedAt),
+						definition,
+						owner,
+					};
+				})
+				.filter((item): item is Exclude<typeof item, undefined> => item !== undefined);
 		},
 	},
 	'metafieldValue.delete': {

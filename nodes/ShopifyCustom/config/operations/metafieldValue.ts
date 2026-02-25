@@ -106,6 +106,41 @@ export const METAFIELD_VALUE_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 	},
 	{
 		resource: 'metafieldValue',
+		value: 'resolveMetadata',
+		name: 'Resolve Metadata',
+		description: 'Resolve metafield metadata by metafield IDs',
+		registryKey: 'metafieldValue.resolveMetadata',
+		fields: [
+			{
+				displayName: 'Metafields',
+				name: 'metafieldResolveItems',
+				type: 'fixedCollection',
+				typeOptions: {
+					multipleValues: true,
+				},
+				default: {},
+				options: [
+					{
+						name: 'items',
+						displayName: 'Metafield',
+						values: [
+							{
+								displayName: 'Metafield ID',
+								name: 'metafieldId',
+								type: 'string',
+								default: '',
+								required: true,
+								placeholder: 'gid://shopify/Metafield/...',
+								description: 'Global metafield ID in Shopify',
+							},
+						],
+					},
+				],
+			},
+		],
+	},
+	{
+		resource: 'metafieldValue',
 		value: 'delete',
 		name: 'Delete',
 		description: 'Delete metafield values',

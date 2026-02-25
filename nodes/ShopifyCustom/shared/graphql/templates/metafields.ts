@@ -154,6 +154,30 @@ query MetafieldGetMany($ownerId: ID!, $first: Int!, $after: String, $namespace: 
 }
 `;
 
+export const METAFIELD_RESOLVE_METADATA_QUERY = `
+query MetafieldResolveMetadata($ids: [ID!]!) {
+	nodes(ids: $ids) {
+		... on Metafield {
+			id
+			namespace
+			key
+			type
+			updatedAt
+			definition {
+				id
+				name
+			}
+			owner {
+				__typename
+				... on Node {
+					id
+				}
+			}
+		}
+	}
+}
+`;
+
 export const METAFIELD_DEFINITION_LIST_QUERY = `
 query MetafieldDefinitionList($ownerType: MetafieldOwnerType!, $first: Int!, $after: String, $query: String) {
 	metafieldDefinitions(ownerType: $ownerType, first: $first, after: $after, query: $query) {
