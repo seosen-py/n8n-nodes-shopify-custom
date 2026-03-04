@@ -69,6 +69,32 @@ const MARKET_ID_FIELD: INodeProperties = {
 	default: '',
 };
 
+const TRANSLATION_OUTPUT_SHAPE_FIELD: INodeProperties = {
+	displayName: 'Output Shape',
+	name: 'outputShape',
+	type: 'options',
+	default: 'resources',
+	description: 'How to structure translation data for automation workflows',
+	options: [
+		{
+			name: 'Resource Objects',
+			value: 'resources',
+			description: 'Return Shopify resources with translatableContent and translations arrays',
+		},
+		{
+			name: 'Flattened Rows (All Keys)',
+			value: 'flattenedAll',
+			description:
+				'Return one row per translatable key with merged source + translated values',
+		},
+		{
+			name: 'Flattened Rows (Only Missing)',
+			value: 'flattenedMissing',
+			description: 'Return only keys that do not have a translation for the selected locale',
+		},
+	],
+};
+
 const REGISTER_TRANSLATIONS_FIELD: INodeProperties = {
 	displayName: 'Translations',
 	name: 'translationsInput',
@@ -197,6 +223,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						description:
 							'Whether to enrich Metafield resource IDs with namespace, key, definition name, and owner',
 					},
+					TRANSLATION_OUTPUT_SHAPE_FIELD,
 					{
 						displayName: 'Include Nested Resources',
 						name: 'includeNestedResources',
@@ -313,6 +340,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						description:
 							'Whether to enrich Metafield resource IDs with namespace, key, definition name, and owner',
 					},
+					TRANSLATION_OUTPUT_SHAPE_FIELD,
 					{
 						displayName: 'Include Nested Resources',
 						name: 'includeNestedResources',

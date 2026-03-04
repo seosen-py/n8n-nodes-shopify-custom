@@ -148,6 +148,10 @@ Most resources support:
   - **Get / Get Many:**
     - Read translatable content (`key`, `digest`) and existing translations
     - Supports locale and optional market filtering
+    - `Output Shape` options for automation:
+      - `Resource Objects` (default Shopify-like structure)
+      - `Flattened Rows (All Keys)` (one row per key)
+      - `Flattened Rows (Only Missing)` (only untranslated keys for selected locale)
   - **Register / Remove:**
     - Create or update translations with `translationsRegister`
     - Delete translations by key + locale (+ optional market IDs)

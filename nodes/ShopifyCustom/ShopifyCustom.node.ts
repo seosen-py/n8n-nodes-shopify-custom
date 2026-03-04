@@ -568,6 +568,177 @@ async function maybeEnrichTranslationMetafieldMetadata(
 	};
 }
 
+type TranslationOutputShape = 'resources' | 'flattenedAll' | 'flattenedMissing';
+
+function getTranslationOutputShape(operationParameters: IDataObject): TranslationOutputShape {
+	const translationOptions = isObject(operationParameters.translationOptions)
+		? operationParameters.translationOptions
+		: undefined;
+	if (!translationOptions) {
+		return 'resources';
+	}
+
+	const outputShape = String(translationOptions.outputShape ?? '').trim();
+	if (outputShape === 'flattenedAll' || outputShape === 'flattenedMissing') {
+		return outputShape;
+	}
+
+	return 'resources';
+}
+
+function getTranslationsByKey(
+	resourceNode: IDataObject,
+	targetLocale: string,
+): Map<string, IDataObject[]> {
+	const translationsByKey = new Map<string, IDataObject[]>();
+	if (!Array.isArray(resourceNode.translations)) {
+		return translationsByKey;
+	}
+
+	for (const translation of resourceNode.translations) {
+		if (!isObject(translation)) {
+			continue;
+		}
+
+		const key = translation.key;
+		if (typeof key !== 'string' || !key) {
+			continue;
+		}
+
+		const locale = translation.locale;
+		if (targetLocale && typeof locale === 'string' && locale && locale !== targetLocale) {
+			continue;
+		}
+
+		const existing = translationsByKey.get(key) ?? [];
+		existing.push({ ...translation });
+		translationsByKey.set(key, existing);
+	}
+
+	return translationsByKey;
+}
+
+function pickRepresentativeTranslation(translations: IDataObject[]): IDataObject | undefined {
+	if (translations.length === 0) {
+		return undefined;
+	}
+
+	const nonMarketTranslation = translations.find(
+		(translation) => !isObject(translation.market),
+	);
+	return nonMarketTranslation ?? translations[0];
+}
+
+function flattenTranslationRowsForResource(
+	resourceNode: IDataObject,
+	targetLocale: string,
+	rows: IDataObject[],
+	parentResourceId?: string,
+): void {
+	const resourceId =
+		typeof resourceNode.resourceId === 'string' && resourceNode.resourceId
+			? resourceNode.resourceId
+			: undefined;
+	const translationsByKey = getTranslationsByKey(resourceNode, targetLocale);
+	const translatableContentItems = Array.isArray(resourceNode.translatableContent)
+		? resourceNode.translatableContent.filter(isObject)
+		: [];
+
+	for (const contentItem of translatableContentItems) {
+		const key = contentItem.key;
+		if (typeof key !== 'string' || !key) {
+			continue;
+		}
+
+		const keyTranslations = translationsByKey.get(key) ?? [];
+		const representative = pickRepresentativeTranslation(keyTranslations);
+
+		const row: IDataObject = {
+			resourceId,
+			parentResourceId: parentResourceId ?? null,
+			resourceLevel: parentResourceId ? 'nested' : 'root',
+			key,
+			sourceValue: contentItem.value,
+			sourceLocale: contentItem.locale,
+			sourceType: contentItem.type,
+			translatableContentDigest: contentItem.digest,
+			targetLocale,
+			translationStatus: keyTranslations.length > 0 ? 'translated' : 'missing',
+			translationCount: keyTranslations.length,
+		};
+
+		if (representative) {
+			row.translatedValue = representative.value;
+			row.translatedUpdatedAt = representative.updatedAt;
+			row.translatedOutdated = representative.outdated;
+			if (isObject(representative.market)) {
+				row.translatedMarketId = representative.market.id;
+				row.translatedMarketName = representative.market.name;
+			}
+		}
+
+		if (keyTranslations.length > 0) {
+			row.translations = keyTranslations;
+		}
+
+		rows.push(row);
+	}
+
+	const nestedConnection = isObject(resourceNode.nestedTranslatableResources)
+		? resourceNode.nestedTranslatableResources
+		: undefined;
+	const nestedResources = Array.isArray(nestedConnection?.nodes)
+		? nestedConnection.nodes.filter(isObject)
+		: [];
+	const nestedParentResourceId = resourceId ?? parentResourceId;
+	for (const nestedResource of nestedResources) {
+		flattenTranslationRowsForResource(
+			nestedResource,
+			targetLocale,
+			rows,
+			nestedParentResourceId,
+		);
+	}
+}
+
+function maybeShapeTranslationOutput(
+	resource: ShopifyResourceValue,
+	operation: string,
+	operationParameters: IDataObject,
+	mainResult: { simplified: unknown; raw: IDataObject },
+): { simplified: unknown; raw: IDataObject } {
+	if (resource !== 'translation' || (operation !== 'get' && operation !== 'getMany')) {
+		return mainResult;
+	}
+
+	const outputShape = getTranslationOutputShape(operationParameters);
+	if (outputShape === 'resources') {
+		return mainResult;
+	}
+
+	const targetLocale =
+		typeof operationParameters.locale === 'string' ? operationParameters.locale : '';
+	const resources = toArrayOfObjects(mainResult.simplified);
+	const flattenedRows: IDataObject[] = [];
+	for (const resourceNode of resources) {
+		flattenTranslationRowsForResource(resourceNode, targetLocale, flattenedRows);
+	}
+
+	const shapedRows =
+		outputShape === 'flattenedMissing'
+			? flattenedRows.filter((row) => row.translationStatus === 'missing')
+			: flattenedRows;
+
+	return {
+		simplified: shapedRows,
+		raw: {
+			...mainResult.raw,
+			translationOutputShape: outputShape,
+			translationOutputRows: shapedRows.length,
+		},
+	};
+}
+
 export class ShopifyCustom implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Shopify Custom',
@@ -789,11 +960,17 @@ export class ShopifyCustom implements INodeType {
 					mainResult,
 					itemIndex,
 				);
+				const resultWithTranslationShape = maybeShapeTranslationOutput(
+					resource,
+					operation,
+					operationParameters,
+					resultWithTranslationMetadata,
+				);
 
 				const outputItems = mapOutputItems(
 					outputMode,
-					resultWithTranslationMetadata.simplified,
-					resultWithTranslationMetadata.raw,
+					resultWithTranslationShape.simplified,
+					resultWithTranslationShape.raw,
 					selectedFields,
 				);
 				returnData.push(...this.helpers.returnJsonArray(outputItems));
