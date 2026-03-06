@@ -210,6 +210,7 @@ function asMetafieldOwnerType(value: unknown): ShopifyMetafieldOwnerType | undef
 		value === 'PRODUCTVARIANT' ||
 		value === 'COLLECTION' ||
 		value === 'ARTICLE' ||
+		value === 'BLOG' ||
 		value === 'CUSTOMER' ||
 		value === 'ORDER' ||
 		value === 'DRAFTORDER'

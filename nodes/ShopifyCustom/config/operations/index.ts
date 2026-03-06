@@ -1,6 +1,7 @@
 import type { INodePropertyOptions } from 'n8n-workflow';
 import type { ShopifyResourceValue } from '../resources';
 import { ARTICLE_OPERATION_CONFIGS } from './article';
+import { BLOG_OPERATION_CONFIGS } from './blog';
 import { COLLECTION_OPERATION_CONFIGS } from './collection';
 import { CUSTOMER_OPERATION_CONFIGS } from './customer';
 import { DRAFT_ORDER_OPERATION_CONFIGS } from './draftOrder';
@@ -20,6 +21,7 @@ export const SHOPIFY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 	...PRODUCT_VARIANT_OPERATION_CONFIGS,
 	...COLLECTION_OPERATION_CONFIGS,
 	...ARTICLE_OPERATION_CONFIGS,
+	...BLOG_OPERATION_CONFIGS,
 	...CUSTOMER_OPERATION_CONFIGS,
 	...ORDER_OPERATION_CONFIGS,
 	...DRAFT_ORDER_OPERATION_CONFIGS,

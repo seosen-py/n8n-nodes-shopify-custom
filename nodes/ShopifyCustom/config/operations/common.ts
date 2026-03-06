@@ -211,7 +211,7 @@ export function seoFields(): INodeProperties[] {
 }
 
 export function templateSuffixTextField(
-	templateName: 'product' | 'collection' | 'article',
+	templateName: 'product' | 'collection' | 'article' | 'blog',
 ): INodeProperties {
 	return {
 		displayName: 'Template Suffix',

@@ -7,6 +7,13 @@ import {
 	ARTICLE_UPDATE_MUTATION,
 } from './templates/article';
 import {
+	BLOG_CREATE_MUTATION,
+	BLOG_DELETE_MUTATION,
+	BLOG_GET_MANY_QUERY,
+	BLOG_GET_QUERY,
+	BLOG_UPDATE_MUTATION,
+} from './templates/blog';
+import {
 	COLLECTION_CREATE_MUTATION,
 	COLLECTION_DELETE_MUTATION,
 	COLLECTION_GET_MANY_QUERY,
@@ -686,6 +693,13 @@ function getArticleOptions(parameters: IDataObject): IDataObject {
 	return {};
 }
 
+function getBlogOptions(parameters: IDataObject): IDataObject {
+	if (isObject(parameters.blogOptions)) {
+		return parameters.blogOptions;
+	}
+	return {};
+}
+
 function getTranslationOutdatedFilter(options: IDataObject): boolean | undefined {
 	const hasFilter = asBoolean(options.filterByOutdated);
 	if (!hasFilter) {
@@ -910,6 +924,68 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		}),
 		mapSimplified: (data) => mapMutationPayload(data, ['articleDelete']),
 		getUserErrors: (data) => parseUserErrors(data, ['articleDelete']),
+	},
+	'blog.create': {
+		document: BLOG_CREATE_MUTATION,
+		buildVariables: (parameters) => {
+			const options = getBlogOptions(parameters);
+			return {
+				blog: {
+					title: asString(parameters.title),
+					handle: asString(parameters.handle),
+					templateSuffix: asString(parameters.templateSuffix),
+					commentPolicy: asString(options.commentPolicy),
+				},
+			};
+		},
+		mapSimplified: (data) => mapSingleNode(data, ['blogCreate', 'blog']),
+		getUserErrors: (data) => parseUserErrors(data, ['blogCreate']),
+	},
+	'blog.get': {
+		document: BLOG_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.blogId),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['blog']),
+	},
+	'blog.getMany': {
+		document: BLOG_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getConnectionVariables(parameters),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['blogs']),
+		pagination: {
+			connectionPath: ['blogs'],
+		},
+	},
+	'blog.update': {
+		document: BLOG_UPDATE_MUTATION,
+		buildVariables: (parameters) => {
+			const options = getBlogOptions(parameters);
+			return {
+				id: asString(parameters.blogId),
+				blog: {
+					title: asString(parameters.title),
+					handle: asString(parameters.handle),
+					templateSuffix: asString(parameters.templateSuffix),
+					commentPolicy: asString(options.commentPolicy),
+					redirectArticles: asBoolean(options.redirectArticles),
+					redirectNewHandle: asBoolean(options.redirectNewHandle),
+				},
+			};
+		},
+		mapSimplified: (data) => mapSingleNode(data, ['blogUpdate', 'blog']),
+		getUserErrors: (data) => parseUserErrors(data, ['blogUpdate']),
+	},
+	'blog.delete': {
+		document: BLOG_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.blogId),
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['blogDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['blogDelete']),
 	},
 	'productVariant.create': {
 		document: PRODUCT_VARIANT_CREATE_MUTATION,

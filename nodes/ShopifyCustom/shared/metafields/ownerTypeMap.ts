@@ -5,6 +5,7 @@ const OWNER_TYPE_BY_RESOURCE: Partial<Record<ShopifyResourceValue, ShopifyMetafi
 	productVariant: 'PRODUCTVARIANT',
 	collection: 'COLLECTION',
 	article: 'ARTICLE',
+	blog: 'BLOG',
 	customer: 'CUSTOMER',
 	order: 'ORDER',
 	draftOrder: 'DRAFTORDER',
