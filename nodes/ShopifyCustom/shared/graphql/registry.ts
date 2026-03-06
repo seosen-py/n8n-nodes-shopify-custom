@@ -158,6 +158,22 @@ function parseArticleAuthorInput(parameters: IDataObject): IDataObject | undefin
 	return name ? { name } : undefined;
 }
 
+function parseArticleImageInput(parameters: IDataObject): IDataObject | undefined {
+	if (!isObject(parameters.articleImage)) {
+		return undefined;
+	}
+
+	const url = asString(parameters.articleImage.url);
+	if (!url) {
+		return undefined;
+	}
+
+	return {
+		url,
+		altText: asString(parameters.articleImage.altText),
+	};
+}
+
 function parseSeoInput(parameters: IDataObject): { title?: string; description?: string } | undefined {
 	const title = asString(parameters.seoTitle);
 	const description = asString(parameters.seoDescription);
@@ -865,6 +881,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 				handle: asString(parameters.handle),
 				body: asString(parameters.body),
 				summary: asString(parameters.summary),
+				image: parseArticleImageInput(parameters),
 				isPublished: asBoolean(parameters.isPublished),
 				publishDate: asString(parameters.publishDate),
 				tags: parseTags(parameters.tags),
@@ -906,6 +923,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 					handle: asString(parameters.handle),
 					body: asString(parameters.body),
 					summary: asString(parameters.summary),
+					image: parseArticleImageInput(parameters),
 					isPublished: asBoolean(options.isPublished),
 					publishDate: asString(parameters.publishDate),
 					tags: parseTags(parameters.tags),

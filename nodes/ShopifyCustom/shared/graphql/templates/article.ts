@@ -7,6 +7,10 @@ mutation ArticleCreate($article: ArticleCreateInput!) {
 			id
 			title
 			handle
+			image {
+				altText
+				url
+			}
 			isPublished
 			publishedAt
 			blog {
@@ -36,6 +40,10 @@ query ArticleGet(
 		id
 		title
 		handle
+		image {
+			altText
+			url
+		}
 		body
 		summary
 		tags
@@ -74,6 +82,10 @@ query ArticleGetMany(
 			id
 			title
 			handle
+			image {
+				altText
+				url
+			}
 			isPublished
 			publishedAt
 			blog {
@@ -101,6 +113,10 @@ mutation ArticleUpdate($id: ID!, $article: ArticleUpdateInput!) {
 			id
 			title
 			handle
+			image {
+				altText
+				url
+			}
 			isPublished
 			publishedAt
 			blog {

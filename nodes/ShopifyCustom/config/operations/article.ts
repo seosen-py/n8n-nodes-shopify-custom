@@ -106,6 +106,29 @@ function articleBaseFields(
 			default: '',
 		},
 		{
+			displayName: 'Image',
+			name: 'articleImage',
+			type: 'collection',
+			placeholder: 'Add image',
+			default: {},
+			options: [
+				{
+					displayName: 'Alt Text',
+					name: 'altText',
+					type: 'string',
+					default: '',
+				},
+				{
+					displayName: 'URL',
+					name: 'url',
+					type: 'string',
+					default: '',
+					placeholder: 'https://example.com/cover.jpg',
+					description: 'Public image URL for the article cover',
+				},
+			],
+		},
+		{
 			displayName: 'Publish Date',
 			name: 'publishDate',
 			type: 'dateTime',
