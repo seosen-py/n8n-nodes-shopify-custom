@@ -28,6 +28,7 @@ import {
 import { throwIfUserErrors, getErrorData } from './shared/errors';
 import { assertNoGraphQLErrors, executeShopifyGraphql } from './shared/graphql/client';
 import { getRegistryOperation } from './shared/graphql/registry';
+import { STAGED_UPLOADS_CREATE_MUTATION } from './shared/graphql/templates/file';
 import { getMetafieldDefinitionOptions } from './shared/metafields/definitions';
 import { getOwnerTypeFromResource } from './shared/metafields/ownerTypeMap';
 import { getReferenceOptions } from './shared/metafields/referenceLoaders';
@@ -76,6 +77,64 @@ function chunkArray<T>(items: T[], size: number): T[][] {
 		chunks.push(items.slice(index, index + size));
 	}
 	return chunks;
+}
+
+function encodeUtf8(value: string): Uint8Array {
+	const encoded = unescape(encodeURIComponent(value));
+	const bytes = new Uint8Array(encoded.length);
+	for (let index = 0; index < encoded.length; index += 1) {
+		bytes[index] = encoded.charCodeAt(index);
+	}
+	return bytes;
+}
+
+function concatUint8Arrays(chunks: Uint8Array[]): Uint8Array {
+	let totalLength = 0;
+	for (const chunk of chunks) {
+		totalLength += chunk.length;
+	}
+
+	const combined = new Uint8Array(totalLength);
+	let offset = 0;
+	for (const chunk of chunks) {
+		combined.set(chunk, offset);
+		offset += chunk.length;
+	}
+	return combined;
+}
+
+function buildMultipartFormDataBody(
+	fields: Array<{ name: string; value: string }>,
+	file: { fieldName: string; filename: string; mimeType: string; content: Uint8Array },
+): { body: Uint8Array; contentType: string } {
+	const boundary = `----n8nShopifyUpload${Date.now().toString(16)}${Math.random()
+		.toString(16)
+		.slice(2)}`;
+	const chunks: Uint8Array[] = [];
+
+	const appendText = (text: string) => {
+		chunks.push(encodeUtf8(text));
+	};
+
+	for (const field of fields) {
+		appendText(`--${boundary}\r\n`);
+		appendText(`Content-Disposition: form-data; name="${field.name}"\r\n\r\n`);
+		appendText(`${field.value}\r\n`);
+	}
+
+	appendText(`--${boundary}\r\n`);
+	appendText(
+		`Content-Disposition: form-data; name="${file.fieldName}"; filename="${file.filename}"\r\n`,
+	);
+	appendText(`Content-Type: ${file.mimeType}\r\n\r\n`);
+	chunks.push(file.content);
+	appendText('\r\n');
+	appendText(`--${boundary}--\r\n`);
+
+	return {
+		body: concatUint8Arrays(chunks),
+		contentType: `multipart/form-data; boundary=${boundary}`,
+	};
 }
 
 function mergeDisplayOptions(
@@ -416,6 +475,150 @@ async function runDeleteUnusedImagesOperation(
 		raw: {
 			list: listResult.raw,
 			deletes: deleteResponses,
+		},
+	};
+}
+
+async function runCreateUploadFileOperation(
+	executeFunctions: IExecuteFunctions,
+	parameters: IDataObject,
+	itemIndex: number,
+): Promise<{ simplified: unknown; raw: IDataObject }> {
+	const binaryPropertyName = String(parameters.binaryPropertyName ?? 'data').trim();
+	if (!binaryPropertyName) {
+		throw new NodeOperationError(executeFunctions.getNode(), 'Binary Property Name is required', {
+			itemIndex,
+		});
+	}
+
+	const binaryData = executeFunctions.helpers.assertBinaryData(itemIndex, binaryPropertyName);
+	const binaryBuffer = await executeFunctions.helpers.getBinaryDataBuffer(itemIndex, binaryPropertyName);
+	const uploadOptions = isObject(parameters.fileUploadOptions) ? parameters.fileUploadOptions : {};
+
+	const filename =
+		(typeof uploadOptions.filename === 'string' && uploadOptions.filename.trim()) ||
+		(typeof binaryData.fileName === 'string' && binaryData.fileName.trim()) ||
+		`upload-${Date.now()}.bin`;
+	const mimeType =
+		(typeof uploadOptions.mimeType === 'string' && uploadOptions.mimeType.trim()) ||
+		(typeof binaryData.mimeType === 'string' && binaryData.mimeType.trim()) ||
+		'application/octet-stream';
+	const contentType =
+		(typeof parameters.contentType === 'string' && parameters.contentType.trim()) || 'IMAGE';
+
+	const stagedResponse = await executeShopifyGraphql<IDataObject>(
+		executeFunctions,
+		STAGED_UPLOADS_CREATE_MUTATION,
+		{
+			input: [
+				{
+					filename,
+					mimeType,
+					httpMethod: 'POST',
+					resource: contentType,
+					fileSize: String(binaryBuffer.length),
+				},
+			],
+		},
+		itemIndex,
+	);
+	assertNoGraphQLErrors(executeFunctions, stagedResponse, itemIndex);
+	const stagedData = (stagedResponse.data ?? {}) as IDataObject;
+
+	const stagedPayload = isObject(stagedData.stagedUploadsCreate)
+		? (stagedData.stagedUploadsCreate as IDataObject)
+		: undefined;
+	const stagedUserErrors = Array.isArray(stagedPayload?.userErrors)
+		? stagedPayload!.userErrors
+				.filter(isObject)
+				.map((userError) => ({
+					field: Array.isArray(userError.field)
+						? userError.field.filter(
+								(fieldPart: unknown): fieldPart is string => typeof fieldPart === 'string',
+							)
+						: null,
+					message: String(userError.message ?? 'Unknown Shopify user error'),
+					code: typeof userError.code === 'string' ? userError.code : null,
+				}))
+		: [];
+	throwIfUserErrors(executeFunctions, stagedUserErrors, itemIndex);
+
+	const stagedTargets = Array.isArray(stagedPayload?.stagedTargets)
+		? stagedPayload!.stagedTargets.filter(isObject)
+		: [];
+	const stagedTarget = stagedTargets[0];
+	if (!stagedTarget) {
+		throw new NodeOperationError(
+			executeFunctions.getNode(),
+			'Shopify did not return a staged upload target',
+			{ itemIndex },
+		);
+	}
+
+	const targetUrl = String(stagedTarget.url ?? '').trim();
+	const resourceUrl = String(stagedTarget.resourceUrl ?? '').trim();
+	if (!targetUrl || !resourceUrl) {
+		throw new NodeOperationError(
+			executeFunctions.getNode(),
+			'Invalid staged upload target returned by Shopify',
+			{ itemIndex },
+		);
+	}
+
+	const targetParameters = Array.isArray(stagedTarget.parameters)
+		? stagedTarget.parameters.filter(isObject)
+		: [];
+	const uploadFields = targetParameters
+		.map((parameter: IDataObject) => ({
+			name: String(parameter.name ?? '').trim(),
+			value: String(parameter.value ?? ''),
+		}))
+		.filter((field: { name: string; value: string }) => field.name.length > 0);
+	const multipartPayload = buildMultipartFormDataBody(uploadFields, {
+		fieldName: 'file',
+		filename,
+		mimeType,
+		content: binaryBuffer,
+	});
+
+	await executeFunctions.helpers.httpRequest({
+		url: targetUrl,
+		method: 'POST',
+		headers: {
+			'Content-Type': multipartPayload.contentType,
+		},
+		body: multipartPayload.body,
+	});
+
+	const createResult = await runRegistryOperation(
+		executeFunctions,
+		'file.create',
+		{
+			fileCreateItems: {
+				items: [
+					{
+						originalSource: resourceUrl,
+						contentType,
+						alt: typeof uploadOptions.alt === 'string' ? uploadOptions.alt : undefined,
+						filename: typeof uploadOptions.filename === 'string' ? uploadOptions.filename : filename,
+					},
+				],
+			},
+		},
+		itemIndex,
+	);
+
+	return {
+		simplified: createResult.simplified,
+		raw: {
+			stagedUpload: {
+				targetUrl,
+				resourceUrl,
+				filename,
+				mimeType,
+				size: binaryBuffer.length,
+			},
+			create: createResult.raw,
 		},
 	};
 }
@@ -966,6 +1169,8 @@ export class ShopifyCustom implements INodeType {
 				const mainResult =
 					resource === 'file' && operation === 'deleteUnusedImages'
 						? await runDeleteUnusedImagesOperation(this, operationParameters, itemIndex)
+						: resource === 'file' && operation === 'createUpload'
+							? await runCreateUploadFileOperation(this, operationParameters, itemIndex)
 						: await runRegistryOperation(
 								this,
 								operationConfig.registryKey,

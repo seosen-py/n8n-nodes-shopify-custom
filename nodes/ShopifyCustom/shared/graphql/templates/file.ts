@@ -50,6 +50,33 @@ query FileGetMany(
 }
 `;
 
+export const FILE_CREATE_MUTATION = `
+mutation FileCreate($files: [FileCreateInput!]!) {
+	fileCreate(files: $files) {
+		files {
+			${FILE_NODE_FIELDS}
+		}
+		${USER_ERRORS_FIELDS}
+	}
+}
+`;
+
+export const STAGED_UPLOADS_CREATE_MUTATION = `
+mutation StagedUploadsCreate($input: [StagedUploadInput!]!) {
+	stagedUploadsCreate(input: $input) {
+		stagedTargets {
+			url
+			resourceUrl
+			parameters {
+				name
+				value
+			}
+		}
+		${USER_ERRORS_FIELDS}
+	}
+}
+`;
+
 export const FILE_UPDATE_MUTATION = `
 mutation FileUpdate($files: [FileUpdateInput!]!) {
 	fileUpdate(files: $files) {
@@ -69,4 +96,3 @@ mutation FileDelete($fileIds: [ID!]!) {
 	}
 }
 `;
-

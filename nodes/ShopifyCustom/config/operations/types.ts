@@ -3,6 +3,7 @@ import type { ShopifyResourceValue } from '../resources';
 
 export type ShopifyOperationValue =
 	| 'create'
+	| 'createUpload'
 	| 'get'
 	| 'getMany'
 	| 'update'
@@ -56,6 +57,7 @@ export type ShopifyOperationKey =
 	| 'draftOrder.getMany'
 	| 'draftOrder.update'
 	| 'draftOrder.delete'
+	| 'file.create'
 	| 'file.getMany'
 	| 'file.update'
 	| 'file.delete'

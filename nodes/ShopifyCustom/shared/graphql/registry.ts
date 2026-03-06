@@ -35,6 +35,7 @@ import {
 	DRAFT_ORDER_UPDATE_MUTATION,
 } from './templates/draftOrder';
 import {
+	FILE_CREATE_MUTATION,
 	FILE_DELETE_MUTATION,
 	FILE_GET_MANY_QUERY,
 	FILE_UPDATE_MUTATION,
@@ -564,6 +565,31 @@ function parseMetaobjectFieldInputs(value: unknown): Array<{ key: string; value:
 		.filter((field): field is { key: string; value: string } => field !== undefined);
 
 	return fields.length > 0 ? fields : undefined;
+}
+
+function parseFileCreateInputs(value: unknown): IDataObject[] | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const creates = value.items
+		.filter(isObject)
+		.map((item) => {
+			const originalSource = asString(item.originalSource);
+			if (!originalSource) {
+				return undefined;
+			}
+
+			return {
+				originalSource,
+				contentType: asString(item.contentType),
+				alt: asString(item.alt),
+				filename: asString(item.filename),
+			} as IDataObject;
+		})
+		.filter((item): item is IDataObject => item !== undefined);
+
+	return creates.length > 0 ? creates : undefined;
 }
 
 function parseFileUpdateInputs(value: unknown): IDataObject[] | undefined {
@@ -1331,6 +1357,20 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		pagination: {
 			connectionPath: ['files'],
 		},
+	},
+	'file.create': {
+		document: FILE_CREATE_MUTATION,
+		buildVariables: (parameters) => ({
+			files: parseFileCreateInputs(parameters.fileCreateItems) ?? [],
+		}),
+		mapSimplified: (data) => {
+			const createdFiles = getPathValue(data, ['fileCreate', 'files']);
+			if (!Array.isArray(createdFiles)) {
+				return [];
+			}
+			return createdFiles.filter(isObject).map(normalizeNode);
+		},
+		getUserErrors: (data) => parseUserErrors(data, ['fileCreate']),
 	},
 	'file.update': {
 		document: FILE_UPDATE_MUTATION,

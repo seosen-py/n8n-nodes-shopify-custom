@@ -23,6 +23,113 @@ const FILE_USED_IN_OPTIONS = [
 	{ name: 'Used In Products', value: 'product' },
 ];
 
+const FILE_CREATE_CONTENT_TYPE_OPTIONS = [
+	{ name: '3D Model', value: 'MODEL_3D' },
+	{ name: 'File', value: 'FILE' },
+	{ name: 'Image', value: 'IMAGE' },
+	{ name: 'Video', value: 'VIDEO' },
+];
+
+function createFields(): INodeProperties[] {
+	return [
+		{
+			displayName: 'Files',
+			name: 'fileCreateItems',
+			type: 'fixedCollection',
+			typeOptions: {
+				multipleValues: true,
+			},
+			default: {},
+			options: [
+				{
+					name: 'items',
+					displayName: 'File',
+					values: [
+						{
+							displayName: 'Alt Text',
+							name: 'alt',
+							type: 'string',
+							default: '',
+						},
+						{
+							displayName: 'Content Type',
+							name: 'contentType',
+							type: 'options',
+							options: FILE_CREATE_CONTENT_TYPE_OPTIONS,
+							default: 'IMAGE',
+						},
+						{
+							displayName: 'Filename',
+							name: 'filename',
+							type: 'string',
+							default: '',
+						},
+						{
+							displayName: 'Original Source',
+							name: 'originalSource',
+							type: 'string',
+							default: '',
+							required: true,
+							placeholder:
+								'https://cdn.example.com/image.jpg or staged upload URL from stagedUploadsCreate',
+							description: 'Public URL or staged upload URL',
+						},
+					],
+				},
+			],
+		},
+	];
+}
+
+function createUploadFields(): INodeProperties[] {
+	return [
+		{
+			displayName: 'Binary Property Name',
+			name: 'binaryPropertyName',
+			type: 'string',
+			default: 'data',
+			required: true,
+			description: 'Name of the binary input property containing the file to upload',
+		},
+		{
+			displayName: 'Content Type',
+			name: 'contentType',
+			type: 'options',
+			options: FILE_CREATE_CONTENT_TYPE_OPTIONS,
+			default: 'IMAGE',
+		},
+		{
+			displayName: 'Options',
+			name: 'fileUploadOptions',
+			type: 'collection',
+			placeholder: 'Add option',
+			default: {},
+			options: [
+				{
+					displayName: 'Alt Text',
+					name: 'alt',
+					type: 'string',
+					default: '',
+				},
+				{
+					displayName: 'Filename',
+					name: 'filename',
+					type: 'string',
+					default: '',
+					description: 'Overrides filename from binary metadata',
+				},
+				{
+					displayName: 'MIME Type',
+					name: 'mimeType',
+					type: 'string',
+					default: '',
+					description: 'Overrides MIME type from binary metadata',
+				},
+			],
+		},
+	];
+}
+
 function getManyFields(): INodeProperties[] {
 	return [
 		{
@@ -242,6 +349,22 @@ function deleteUnusedImagesFields(): INodeProperties[] {
 }
 
 export const FILE_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
+	{
+		resource: 'file',
+		value: 'create',
+		name: 'Create',
+		description: 'Create files in Shopify from URLs or staged upload sources',
+		registryKey: 'file.create',
+		fields: createFields(),
+	},
+	{
+		resource: 'file',
+		value: 'createUpload',
+		name: 'Create Upload',
+		description: 'Upload binary data and create files in Shopify',
+		registryKey: 'file.create',
+		fields: createUploadFields(),
+	},
 	{
 		resource: 'file',
 		value: 'getMany',
