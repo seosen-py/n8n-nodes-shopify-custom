@@ -210,7 +210,9 @@ export function seoFields(): INodeProperties[] {
 	];
 }
 
-export function templateSuffixTextField(templateName: 'product' | 'collection'): INodeProperties {
+export function templateSuffixTextField(
+	templateName: 'product' | 'collection' | 'article',
+): INodeProperties {
 	return {
 		displayName: 'Template Suffix',
 		name: 'templateSuffix',

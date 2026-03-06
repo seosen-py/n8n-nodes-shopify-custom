@@ -209,6 +209,7 @@ function asMetafieldOwnerType(value: unknown): ShopifyMetafieldOwnerType | undef
 		value === 'PRODUCT' ||
 		value === 'PRODUCTVARIANT' ||
 		value === 'COLLECTION' ||
+		value === 'ARTICLE' ||
 		value === 'CUSTOMER' ||
 		value === 'ORDER' ||
 		value === 'DRAFTORDER'
@@ -652,6 +653,20 @@ function flattenTranslationRowsForResource(
 
 		const keyTranslations = translationsByKey.get(key) ?? [];
 		const representative = pickRepresentativeTranslation(keyTranslations);
+		const sourceLocale =
+			typeof contentItem.locale === 'string' ? contentItem.locale : undefined;
+		const usesSourceLocaleAsTarget =
+			keyTranslations.length === 0 &&
+			typeof targetLocale === 'string' &&
+			targetLocale.length > 0 &&
+			!!sourceLocale &&
+			sourceLocale === targetLocale;
+		const translationStatus =
+			keyTranslations.length > 0
+				? 'translated'
+				: usesSourceLocaleAsTarget
+					? 'source'
+					: 'missing';
 
 		const row: IDataObject = {
 			resourceId,
@@ -659,11 +674,11 @@ function flattenTranslationRowsForResource(
 			resourceLevel: parentResourceId ? 'nested' : 'root',
 			key,
 			sourceValue: contentItem.value,
-			sourceLocale: contentItem.locale,
+			sourceLocale,
 			sourceType: contentItem.type,
 			translatableContentDigest: contentItem.digest,
 			targetLocale,
-			translationStatus: keyTranslations.length > 0 ? 'translated' : 'missing',
+			translationStatus,
 			translationCount: keyTranslations.length,
 		};
 
@@ -675,6 +690,10 @@ function flattenTranslationRowsForResource(
 				row.translatedMarketId = representative.market.id;
 				row.translatedMarketName = representative.market.name;
 			}
+		}
+		if (!representative && usesSourceLocaleAsTarget) {
+			row.translatedValue = contentItem.value;
+			row.translatedOutdated = false;
 		}
 
 		if (keyTranslations.length > 0) {

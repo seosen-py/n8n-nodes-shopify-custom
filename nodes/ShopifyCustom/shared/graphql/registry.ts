@@ -1,5 +1,12 @@
 import type { IDataObject } from 'n8n-workflow';
 import {
+	ARTICLE_CREATE_MUTATION,
+	ARTICLE_DELETE_MUTATION,
+	ARTICLE_GET_MANY_QUERY,
+	ARTICLE_GET_QUERY,
+	ARTICLE_UPDATE_MUTATION,
+} from './templates/article';
+import {
 	COLLECTION_CREATE_MUTATION,
 	COLLECTION_DELETE_MUTATION,
 	COLLECTION_GET_MANY_QUERY,
@@ -130,6 +137,18 @@ function parseTags(value: unknown): string[] | undefined {
 		.filter((tag) => tag.length > 0);
 
 	return tags.length > 0 ? tags : undefined;
+}
+
+function parseArticleAuthorInput(parameters: IDataObject): IDataObject | undefined {
+	const authorSource = asString(parameters.authorSource) ?? 'name';
+
+	if (authorSource === 'userId') {
+		const userId = asString(parameters.authorUserId);
+		return userId ? { userId } : undefined;
+	}
+
+	const name = asString(parameters.authorName);
+	return name ? { name } : undefined;
 }
 
 function parseSeoInput(parameters: IDataObject): { title?: string; description?: string } | undefined {
@@ -660,6 +679,13 @@ function getTranslationOptions(parameters: IDataObject): IDataObject {
 	return {};
 }
 
+function getArticleOptions(parameters: IDataObject): IDataObject {
+	if (isObject(parameters.articleOptions)) {
+		return parameters.articleOptions;
+	}
+	return {};
+}
+
 function getTranslationOutdatedFilter(options: IDataObject): boolean | undefined {
 	const hasFilter = asBoolean(options.filterByOutdated);
 	if (!hasFilter) {
@@ -814,6 +840,76 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		}),
 		mapSimplified: (data) => mapMutationPayload(data, ['productDelete']),
 		getUserErrors: (data) => parseUserErrors(data, ['productDelete']),
+	},
+	'article.create': {
+		document: ARTICLE_CREATE_MUTATION,
+		buildVariables: (parameters) => ({
+			article: {
+				blogId: asString(parameters.blogId),
+				title: asString(parameters.title),
+				author: parseArticleAuthorInput(parameters),
+				handle: asString(parameters.handle),
+				body: asString(parameters.body),
+				summary: asString(parameters.summary),
+				isPublished: asBoolean(parameters.isPublished),
+				publishDate: asString(parameters.publishDate),
+				tags: parseTags(parameters.tags),
+				templateSuffix: asString(parameters.templateSuffix),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['articleCreate', 'article']),
+		getUserErrors: (data) => parseUserErrors(data, ['articleCreate']),
+	},
+	'article.get': {
+		document: ARTICLE_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.articleId),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['article']),
+	},
+	'article.getMany': {
+		document: ARTICLE_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			...getConnectionVariables(parameters),
+			...getMetafieldReadVariables(parameters),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['articles']),
+		pagination: {
+			connectionPath: ['articles'],
+		},
+	},
+	'article.update': {
+		document: ARTICLE_UPDATE_MUTATION,
+		buildVariables: (parameters) => {
+			const options = getArticleOptions(parameters);
+			return {
+				id: asString(parameters.articleId),
+				article: {
+					blogId: asString(parameters.blogId),
+					title: asString(parameters.title),
+					author: parseArticleAuthorInput(parameters),
+					handle: asString(parameters.handle),
+					body: asString(parameters.body),
+					summary: asString(parameters.summary),
+					isPublished: asBoolean(options.isPublished),
+					publishDate: asString(parameters.publishDate),
+					tags: parseTags(parameters.tags),
+					templateSuffix: asString(parameters.templateSuffix),
+					redirectNewHandle: asBoolean(options.redirectNewHandle),
+				},
+			};
+		},
+		mapSimplified: (data) => mapSingleNode(data, ['articleUpdate', 'article']),
+		getUserErrors: (data) => parseUserErrors(data, ['articleUpdate']),
+	},
+	'article.delete': {
+		document: ARTICLE_DELETE_MUTATION,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.articleId),
+		}),
+		mapSimplified: (data) => mapMutationPayload(data, ['articleDelete']),
+		getUserErrors: (data) => parseUserErrors(data, ['articleDelete']),
 	},
 	'productVariant.create': {
 		document: PRODUCT_VARIANT_CREATE_MUTATION,

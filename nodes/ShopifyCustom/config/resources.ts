@@ -2,6 +2,7 @@ export type ShopifyResourceValue =
 	| 'product'
 	| 'productVariant'
 	| 'collection'
+	| 'article'
 	| 'customer'
 	| 'order'
 	| 'draftOrder'
@@ -16,6 +17,7 @@ export type ShopifyMetafieldOwnerType =
 	| 'PRODUCT'
 	| 'PRODUCTVARIANT'
 	| 'COLLECTION'
+	| 'ARTICLE'
 	| 'CUSTOMER'
 	| 'ORDER'
 	| 'DRAFTORDER';
@@ -45,6 +47,12 @@ export const SHOPIFY_RESOURCE_DEFINITIONS: IShopifyResourceDefinition[] = [
 		name: 'Collection',
 		description: 'Manage Shopify collections',
 		ownerType: 'COLLECTION',
+	},
+	{
+		value: 'article',
+		name: 'Article',
+		description: 'Manage Shopify blog articles',
+		ownerType: 'ARTICLE',
 	},
 	{
 		value: 'customer',

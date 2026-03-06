@@ -3,6 +3,7 @@ import { gidField } from './common';
 import type { IShopifyOperationConfig } from './types';
 
 const OWNER_TYPE_OPTIONS = [
+	{ name: 'Article', value: 'ARTICLE' },
 	{ name: 'Product', value: 'PRODUCT' },
 	{ name: 'Product Variant', value: 'PRODUCTVARIANT' },
 	{ name: 'Collection', value: 'COLLECTION' },
