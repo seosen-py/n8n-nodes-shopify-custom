@@ -1079,6 +1079,14 @@ export class ShopifyCustom implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
+		let adminApiVersion: string | undefined;
+		try {
+			const credentials = await this.getCredentials('shopifyCustomAdminApi');
+			adminApiVersion =
+				typeof credentials.apiVersion === 'string' ? credentials.apiVersion.trim() : undefined;
+		} catch {
+			adminApiVersion = undefined;
+		}
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
 			let currentResource: ShopifyResourceValue = 'product';
@@ -1124,6 +1132,9 @@ export class ShopifyCustom implements INodeType {
 					operation,
 					itemIndex,
 				);
+				if (adminApiVersion) {
+					operationParameters.__apiVersion = adminApiVersion;
+				}
 
 				if (resource === 'metafieldValue') {
 					const ownerId = String(operationParameters.ownerId ?? '');

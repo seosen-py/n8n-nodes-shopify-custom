@@ -716,23 +716,47 @@ function parseTranslationKeys(value: unknown): string[] | undefined {
 	return keys.length > 0 ? Array.from(new Set(keys)) : undefined;
 }
 
+function isApiVersionAtLeast(apiVersion: string | undefined, target: string): boolean {
+	const versionPattern = /^(\d{4})-(\d{2})$/;
+	const sourceMatch = (apiVersion ?? '').match(versionPattern);
+	const targetMatch = target.match(versionPattern);
+	if (!sourceMatch || !targetMatch) {
+		return false;
+	}
+
+	const sourceYear = Number(sourceMatch[1]);
+	const sourceMonth = Number(sourceMatch[2]);
+	const targetYear = Number(targetMatch[1]);
+	const targetMonth = Number(targetMatch[2]);
+
+	if (sourceYear !== targetYear) {
+		return sourceYear > targetYear;
+	}
+
+	return sourceMonth >= targetMonth;
+}
+
 function parseInventoryQuantityNames(value: unknown): string[] {
 	const quantityNames = parseStringArray(value);
 	return quantityNames && quantityNames.length > 0 ? quantityNames : ['available'];
 }
 
-function parseInventorySetQuantities(value: unknown): IDataObject[] | undefined {
+function parseInventorySetQuantities(
+	value: unknown,
+	apiVersion?: string,
+): IDataObject[] | undefined {
 	if (!isObject(value) || !Array.isArray(value.items)) {
 		return undefined;
 	}
 
+	const useChangeFromQuantity = isApiVersionAtLeast(apiVersion, '2026-01');
 	const quantities = value.items
 		.filter(isObject)
 		.map((item) => {
 			const inventoryItemId = asString(item.inventoryItemId);
 			const locationId = asString(item.locationId);
 			const quantity = asNumber(item.quantity);
-			const changeFromQuantity = asNumber(item.changeFromQuantity);
+			const compareOrChangeQuantity = asNumber(item.compareQuantity ?? item.changeFromQuantity);
 
 			if (!inventoryItemId || !locationId || quantity === undefined) {
 				return undefined;
@@ -744,8 +768,12 @@ function parseInventorySetQuantities(value: unknown): IDataObject[] | undefined 
 				quantity: Math.trunc(quantity),
 			};
 
-			if (changeFromQuantity !== undefined) {
-				parsedQuantity.changeFromQuantity = Math.trunc(changeFromQuantity);
+			if (compareOrChangeQuantity !== undefined) {
+				if (useChangeFromQuantity) {
+					parsedQuantity.changeFromQuantity = Math.trunc(compareOrChangeQuantity);
+				} else {
+					parsedQuantity.compareQuantity = Math.trunc(compareOrChangeQuantity);
+				}
 			}
 
 			return parsedQuantity;
@@ -755,11 +783,15 @@ function parseInventorySetQuantities(value: unknown): IDataObject[] | undefined 
 	return quantities.length > 0 ? quantities : undefined;
 }
 
-function parseInventoryAdjustChanges(value: unknown): IDataObject[] | undefined {
+function parseInventoryAdjustChanges(
+	value: unknown,
+	apiVersion?: string,
+): IDataObject[] | undefined {
 	if (!isObject(value) || !Array.isArray(value.items)) {
 		return undefined;
 	}
 
+	const includeChangeFromQuantity = isApiVersionAtLeast(apiVersion, '2026-01');
 	const changes = value.items
 		.filter(isObject)
 		.map((item) => {
@@ -778,7 +810,7 @@ function parseInventoryAdjustChanges(value: unknown): IDataObject[] | undefined 
 				locationId,
 			};
 
-			if (changeFromQuantity !== undefined) {
+			if (includeChangeFromQuantity && changeFromQuantity !== undefined) {
 				parsedChange.changeFromQuantity = Math.trunc(changeFromQuantity);
 			}
 
@@ -1535,12 +1567,14 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: INVENTORY_SET_QUANTITIES_MUTATION,
 		buildVariables: (parameters) => {
 			const options = getInventorySetOptions(parameters);
+			const apiVersion = asString(parameters.__apiVersion);
 			return {
 				input: {
+					ignoreCompareQuantity: asBoolean(options.ignoreCompareQuantity),
 					name: asString(options.name) ?? 'available',
 					reason: asString(options.reason) ?? 'correction',
 					referenceDocumentUri: asString(options.referenceDocumentUri),
-					quantities: parseInventorySetQuantities(parameters.inventoryQuantities) ?? [],
+					quantities: parseInventorySetQuantities(parameters.inventoryQuantities, apiVersion) ?? [],
 				},
 			};
 		},
@@ -1552,12 +1586,13 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: INVENTORY_ADJUST_QUANTITIES_MUTATION,
 		buildVariables: (parameters) => {
 			const options = getInventoryAdjustOptions(parameters);
+			const apiVersion = asString(parameters.__apiVersion);
 			return {
 				input: {
 					name: asString(options.name) ?? 'available',
 					reason: asString(options.reason) ?? 'correction',
 					referenceDocumentUri: asString(options.referenceDocumentUri),
-					changes: parseInventoryAdjustChanges(parameters.inventoryAdjustChanges) ?? [],
+					changes: parseInventoryAdjustChanges(parameters.inventoryAdjustChanges, apiVersion) ?? [],
 				},
 			};
 		},

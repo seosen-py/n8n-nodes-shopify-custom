@@ -251,13 +251,13 @@ function setFields(): INodeProperties[] {
 					displayName: 'Quantity',
 					values: [
 						{
-							displayName: 'Change From Quantity',
-							name: 'changeFromQuantity',
+							displayName: 'Compare Quantity',
+							name: 'compareQuantity',
 							type: 'string',
 							default: '',
-							placeholder: '101',
+							placeholder: '10',
 							description:
-								'Last known quantity for compare-and-swap check; leave empty to skip',
+								'Last known quantity for compare-and-swap check; leave empty to use ignore option',
 						},
 						{
 							displayName: 'Inventory Item ID',
@@ -298,6 +298,14 @@ function setFields(): INodeProperties[] {
 			placeholder: 'Add option',
 			default: {},
 			options: [
+				{
+					displayName: 'Ignore Compare Quantity',
+					name: 'ignoreCompareQuantity',
+					type: 'boolean',
+					default: false,
+					description:
+						'Whether to disable compare-and-swap check for set quantities (2025-10)',
+				},
 				{
 					displayName: 'Name',
 					name: 'name',
@@ -349,7 +357,7 @@ function adjustFields(): INodeProperties[] {
 							default: '',
 							placeholder: '5',
 							description:
-								'Last known quantity for compare-and-swap check; leave empty to skip',
+								'Last known quantity for compare-and-swap check (used in 2026-01+ API versions)',
 						},
 						{
 							displayName: 'Delta',
