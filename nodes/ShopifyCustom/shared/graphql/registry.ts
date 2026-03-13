@@ -41,6 +41,13 @@ import {
 	FILE_UPDATE_MUTATION,
 } from './templates/file';
 import {
+	INVENTORY_ADJUST_QUANTITIES_MUTATION,
+	INVENTORY_GET_MANY_QUERY,
+	INVENTORY_GET_QUERY,
+	INVENTORY_SET_QUANTITIES_MUTATION,
+	INVENTORY_UPDATE_MUTATION,
+} from './templates/inventory';
+import {
 	TRANSLATION_GET_MANY_QUERY,
 	TRANSLATION_GET_QUERY,
 	TRANSLATION_REGISTER_MUTATION,
@@ -709,6 +716,79 @@ function parseTranslationKeys(value: unknown): string[] | undefined {
 	return keys.length > 0 ? Array.from(new Set(keys)) : undefined;
 }
 
+function parseInventoryQuantityNames(value: unknown): string[] {
+	const quantityNames = parseStringArray(value);
+	return quantityNames && quantityNames.length > 0 ? quantityNames : ['available'];
+}
+
+function parseInventorySetQuantities(value: unknown): IDataObject[] | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const quantities = value.items
+		.filter(isObject)
+		.map((item) => {
+			const inventoryItemId = asString(item.inventoryItemId);
+			const locationId = asString(item.locationId);
+			const quantity = asNumber(item.quantity);
+			const changeFromQuantity = asNumber(item.changeFromQuantity);
+
+			if (!inventoryItemId || !locationId || quantity === undefined) {
+				return undefined;
+			}
+
+			const parsedQuantity: IDataObject = {
+				inventoryItemId,
+				locationId,
+				quantity: Math.trunc(quantity),
+			};
+
+			if (changeFromQuantity !== undefined) {
+				parsedQuantity.changeFromQuantity = Math.trunc(changeFromQuantity);
+			}
+
+			return parsedQuantity;
+		})
+		.filter((item): item is IDataObject => item !== undefined);
+
+	return quantities.length > 0 ? quantities : undefined;
+}
+
+function parseInventoryAdjustChanges(value: unknown): IDataObject[] | undefined {
+	if (!isObject(value) || !Array.isArray(value.items)) {
+		return undefined;
+	}
+
+	const changes = value.items
+		.filter(isObject)
+		.map((item) => {
+			const delta = asNumber(item.delta);
+			const inventoryItemId = asString(item.inventoryItemId);
+			const locationId = asString(item.locationId);
+			const changeFromQuantity = asNumber(item.changeFromQuantity);
+
+			if (delta === undefined || !inventoryItemId || !locationId) {
+				return undefined;
+			}
+
+			const parsedChange: IDataObject = {
+				delta: Math.trunc(delta),
+				inventoryItemId,
+				locationId,
+			};
+
+			if (changeFromQuantity !== undefined) {
+				parsedChange.changeFromQuantity = Math.trunc(changeFromQuantity);
+			}
+
+			return parsedChange;
+		})
+		.filter((item): item is IDataObject => item !== undefined);
+
+	return changes.length > 0 ? changes : undefined;
+}
+
 function parseStringArray(value: unknown): string[] | undefined {
 	if (!Array.isArray(value)) {
 		return undefined;
@@ -726,6 +806,66 @@ function getTranslationOptions(parameters: IDataObject): IDataObject {
 		return parameters.translationOptions;
 	}
 	return {};
+}
+
+function getInventoryReadOptions(parameters: IDataObject): IDataObject {
+	if (isObject(parameters.inventoryReadOptions)) {
+		return parameters.inventoryReadOptions;
+	}
+	if (isObject(parameters.inventoryQueryOptions)) {
+		return parameters.inventoryQueryOptions;
+	}
+	return {};
+}
+
+function getInventorySetOptions(parameters: IDataObject): IDataObject {
+	if (isObject(parameters.inventorySetOptions)) {
+		return parameters.inventorySetOptions;
+	}
+	return {};
+}
+
+function getInventoryAdjustOptions(parameters: IDataObject): IDataObject {
+	if (isObject(parameters.inventoryAdjustOptions)) {
+		return parameters.inventoryAdjustOptions;
+	}
+	return {};
+}
+
+function parseInventoryUpdateInput(parameters: IDataObject): IDataObject {
+	const input = isObject(parameters.inventoryUpdateInput) ? parameters.inventoryUpdateInput : {};
+	const parsedInput: IDataObject = {};
+	const cost = asString(input.cost);
+	const countryCodeOfOrigin = asString(input.countryCodeOfOrigin);
+	const harmonizedSystemCode = asString(input.harmonizedSystemCode);
+	const provinceCodeOfOrigin = asString(input.provinceCodeOfOrigin);
+	const requiresShipping = asBoolean(input.requiresShipping);
+	const sku = asString(input.sku);
+	const tracked = asBoolean(input.tracked);
+
+	if (cost !== undefined) {
+		parsedInput.cost = cost;
+	}
+	if (countryCodeOfOrigin !== undefined) {
+		parsedInput.countryCodeOfOrigin = countryCodeOfOrigin;
+	}
+	if (harmonizedSystemCode !== undefined) {
+		parsedInput.harmonizedSystemCode = harmonizedSystemCode;
+	}
+	if (provinceCodeOfOrigin !== undefined) {
+		parsedInput.provinceCodeOfOrigin = provinceCodeOfOrigin;
+	}
+	if (requiresShipping !== undefined) {
+		parsedInput.requiresShipping = requiresShipping;
+	}
+	if (sku !== undefined) {
+		parsedInput.sku = sku;
+	}
+	if (tracked !== undefined) {
+		parsedInput.tracked = tracked;
+	}
+
+	return parsedInput;
 }
 
 function getArticleOptions(parameters: IDataObject): IDataObject {
@@ -1347,6 +1487,83 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		}),
 		mapSimplified: (data) => mapMutationPayload(data, ['draftOrderDelete']),
 		getUserErrors: (data) => parseUserErrors(data, ['draftOrderDelete']),
+	},
+	'inventory.get': {
+		document: INVENTORY_GET_QUERY,
+		buildVariables: (parameters) => {
+			const options = getInventoryReadOptions(parameters);
+			return {
+				id: asString(parameters.inventoryItemId),
+				includeInventoryLevels: Boolean(options.includeInventoryLevels),
+				inventoryLevelsFirst: Math.max(1, Math.trunc(asNumber(options.inventoryLevelsFirst) ?? 25)),
+				inventoryQuantityNames: parseInventoryQuantityNames(options.inventoryQuantityNames),
+			};
+		},
+		mapSimplified: (data) => mapSingleNode(data, ['inventoryItem']),
+	},
+	'inventory.getMany': {
+		document: INVENTORY_GET_MANY_QUERY,
+		buildVariables: (parameters) => {
+			const options = getInventoryReadOptions(parameters);
+			const limit = asNumber(parameters.limit) ?? 50;
+
+			return {
+				first: Math.max(1, Math.trunc(limit)),
+				after: asString(options.afterCursor),
+				query: asString(options.query ?? parameters.query),
+				reverse: asBoolean(options.reverse),
+				includeInventoryLevels: Boolean(options.includeInventoryLevels),
+				inventoryLevelsFirst: Math.max(1, Math.trunc(asNumber(options.inventoryLevelsFirst) ?? 25)),
+				inventoryQuantityNames: parseInventoryQuantityNames(options.inventoryQuantityNames),
+			};
+		},
+		mapSimplified: (data) => mapNodesFromConnection(data, ['inventoryItems']),
+		pagination: {
+			connectionPath: ['inventoryItems'],
+		},
+	},
+	'inventory.update': {
+		document: INVENTORY_UPDATE_MUTATION,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.inventoryItemId),
+			input: parseInventoryUpdateInput(parameters),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['inventoryItemUpdate', 'inventoryItem']),
+		getUserErrors: (data) => parseUserErrors(data, ['inventoryItemUpdate']),
+	},
+	'inventory.set': {
+		document: INVENTORY_SET_QUANTITIES_MUTATION,
+		buildVariables: (parameters) => {
+			const options = getInventorySetOptions(parameters);
+			return {
+				input: {
+					name: asString(options.name) ?? 'available',
+					reason: asString(options.reason) ?? 'correction',
+					referenceDocumentUri: asString(options.referenceDocumentUri),
+					quantities: parseInventorySetQuantities(parameters.inventoryQuantities) ?? [],
+				},
+			};
+		},
+		mapSimplified: (data) =>
+			mapSingleNode(data, ['inventorySetQuantities', 'inventoryAdjustmentGroup']),
+		getUserErrors: (data) => parseUserErrors(data, ['inventorySetQuantities']),
+	},
+	'inventory.adjust': {
+		document: INVENTORY_ADJUST_QUANTITIES_MUTATION,
+		buildVariables: (parameters) => {
+			const options = getInventoryAdjustOptions(parameters);
+			return {
+				input: {
+					name: asString(options.name) ?? 'available',
+					reason: asString(options.reason) ?? 'correction',
+					referenceDocumentUri: asString(options.referenceDocumentUri),
+					changes: parseInventoryAdjustChanges(parameters.inventoryAdjustChanges) ?? [],
+				},
+			};
+		},
+		mapSimplified: (data) =>
+			mapSingleNode(data, ['inventoryAdjustQuantities', 'inventoryAdjustmentGroup']),
+		getUserErrors: (data) => parseUserErrors(data, ['inventoryAdjustQuantities']),
 	},
 	'file.getMany': {
 		document: FILE_GET_MANY_QUERY,

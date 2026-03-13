@@ -7,6 +7,7 @@ export type ShopifyResourceValue =
 	| 'customer'
 	| 'order'
 	| 'draftOrder'
+	| 'inventory'
 	| 'file'
 	| 'translation'
 	| 'metaobject'
@@ -79,6 +80,11 @@ export const SHOPIFY_RESOURCE_DEFINITIONS: IShopifyResourceDefinition[] = [
 		name: 'Draft Order',
 		description: 'Manage draft orders',
 		ownerType: 'DRAFTORDER',
+	},
+	{
+		value: 'inventory',
+		name: 'Inventory',
+		description: 'Manage inventory items and quantities',
 	},
 	{
 		value: 'file',

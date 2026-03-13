@@ -6,6 +6,7 @@ import { COLLECTION_OPERATION_CONFIGS } from './collection';
 import { CUSTOMER_OPERATION_CONFIGS } from './customer';
 import { DRAFT_ORDER_OPERATION_CONFIGS } from './draftOrder';
 import { FILE_OPERATION_CONFIGS } from './file';
+import { INVENTORY_OPERATION_CONFIGS } from './inventory';
 import { METAFIELD_DEFINITION_OPERATION_CONFIGS } from './metafieldDefinition';
 import { METAFIELD_VALUE_OPERATION_CONFIGS } from './metafieldValue';
 import { METAOBJECT_OPERATION_CONFIGS } from './metaobject';
@@ -25,6 +26,7 @@ export const SHOPIFY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 	...CUSTOMER_OPERATION_CONFIGS,
 	...ORDER_OPERATION_CONFIGS,
 	...DRAFT_ORDER_OPERATION_CONFIGS,
+	...INVENTORY_OPERATION_CONFIGS,
 	...FILE_OPERATION_CONFIGS,
 	...TRANSLATION_OPERATION_CONFIGS,
 	...METAOBJECT_OPERATION_CONFIGS,
