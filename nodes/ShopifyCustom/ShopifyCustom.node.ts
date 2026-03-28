@@ -29,6 +29,10 @@ import { throwIfUserErrors, getErrorData } from './shared/errors';
 import { assertNoGraphQLErrors, executeShopifyGraphql } from './shared/graphql/client';
 import { getRegistryOperation } from './shared/graphql/registry';
 import { STAGED_UPLOADS_CREATE_MUTATION } from './shared/graphql/templates/file';
+import {
+	TRANSLATION_COLLECTION_METAFIELD_IDS_QUERY,
+	TRANSLATION_RESOURCES_BY_IDS_QUERY,
+} from './shared/graphql/templates/translations';
 import { getMetafieldDefinitionOptions } from './shared/metafields/definitions';
 import { getOwnerTypeFromResource } from './shared/metafields/ownerTypeMap';
 import { getReferenceOptions } from './shared/metafields/referenceLoaders';
@@ -816,10 +820,248 @@ function getRequestedTranslationMarketId(operationParameters: IDataObject): stri
 	return toOptionalString(operationParameters.marketId);
 }
 
+function shouldIncludeTranslationMetafields(operationParameters: IDataObject): boolean {
+	const translationOptions = getTranslationOptionsFromParameters(operationParameters);
+	return Boolean(translationOptions?.includeMetafields);
+}
+
+function getTranslationMetafieldLimit(operationParameters: IDataObject): number {
+	const translationOptions = getTranslationOptionsFromParameters(operationParameters);
+	const rawLimit = Number(translationOptions?.metafieldLimit ?? 50);
+	if (!Number.isFinite(rawLimit)) {
+		return 50;
+	}
+
+	return Math.max(1, Math.min(250, Math.trunc(rawLimit)));
+}
+
+function getTranslationOutdatedFilter(operationParameters: IDataObject): boolean | undefined {
+	const translationOptions = getTranslationOptionsFromParameters(operationParameters);
+	if (!translationOptions?.filterByOutdated) {
+		return undefined;
+	}
+
+	return Boolean(translationOptions.outdated ?? true);
+}
+
 function getTranslationScope(operationParameters: IDataObject): 'global' | 'marketSpecific' {
 	return toOptionalString(operationParameters.translationScope) === 'marketSpecific'
 		? 'marketSpecific'
 		: 'global';
+}
+
+async function fetchCollectionMetafieldIds(
+	executeFunctions: IExecuteFunctions,
+	collectionIds: string[],
+	metafieldLimit: number,
+	itemIndex: number,
+): Promise<{ idsByCollectionId: Map<string, string[]>; truncatedCollectionIds: string[] }> {
+	const response = await executeShopifyGraphql<IDataObject>(
+		executeFunctions,
+		TRANSLATION_COLLECTION_METAFIELD_IDS_QUERY,
+		{
+			collectionIds,
+			metafieldsFirst: metafieldLimit,
+		},
+		itemIndex,
+	);
+	assertNoGraphQLErrors(executeFunctions, response, itemIndex);
+
+	const idsByCollectionId = new Map<string, string[]>();
+	const truncatedCollectionIds: string[] = [];
+	const nodes = Array.isArray(response.data?.nodes) ? response.data.nodes.filter(isObject) : [];
+	for (const node of nodes) {
+		const collectionId = toOptionalString(node.id);
+		if (!collectionId) {
+			continue;
+		}
+
+		const metafieldsConnection = isObject(node.metafields) ? node.metafields : undefined;
+		const metafieldNodes = Array.isArray(metafieldsConnection?.nodes)
+			? metafieldsConnection.nodes.filter(isObject)
+			: [];
+		const metafieldIds = metafieldNodes
+			.map((metafieldNode: IDataObject) => toOptionalString(metafieldNode.id))
+			.filter((metafieldId: string | undefined): metafieldId is string => !!metafieldId);
+
+		idsByCollectionId.set(collectionId, metafieldIds);
+		if (metafieldsConnection?.pageInfo && isObject(metafieldsConnection.pageInfo)) {
+			if (metafieldsConnection.pageInfo.hasNextPage) {
+				truncatedCollectionIds.push(collectionId);
+			}
+		}
+	}
+
+	return {
+		idsByCollectionId,
+		truncatedCollectionIds,
+	};
+}
+
+async function fetchTranslationResourcesByIds(
+	executeFunctions: IExecuteFunctions,
+	resourceIds: string[],
+	targetLocale: string,
+	targetMarketId: string | undefined,
+	outdated: boolean | undefined,
+	itemIndex: number,
+): Promise<Map<string, IDataObject>> {
+	const resourcesById = new Map<string, IDataObject>();
+	const includeMarketContext = Boolean(targetMarketId);
+
+	for (const resourceIdChunk of chunkArray(resourceIds, 250)) {
+		const response = await executeShopifyGraphql<IDataObject>(
+			executeFunctions,
+			TRANSLATION_RESOURCES_BY_IDS_QUERY,
+			{
+				resourceIds: resourceIdChunk,
+				first: resourceIdChunk.length,
+				locale: targetLocale,
+				marketId: targetMarketId,
+				includeMarketContext,
+				outdated,
+			},
+			itemIndex,
+		);
+		assertNoGraphQLErrors(executeFunctions, response, itemIndex);
+
+		const connection = isObject(response.data?.translatableResourcesByIds)
+			? response.data.translatableResourcesByIds
+			: undefined;
+		const nodes = Array.isArray(connection?.nodes) ? connection.nodes.filter(isObject) : [];
+		for (const node of nodes) {
+			const resourceId = toOptionalString(node.resourceId);
+			if (!resourceId) {
+				continue;
+			}
+			resourcesById.set(resourceId, { ...node });
+		}
+	}
+
+	return resourcesById;
+}
+
+async function maybeHydrateCollectionTranslationMetafields(
+	executeFunctions: IExecuteFunctions,
+	operationParameters: IDataObject,
+	mainResult: { simplified: unknown; raw: IDataObject },
+	itemIndex: number,
+): Promise<{ simplified: unknown; raw: IDataObject }> {
+	if (!shouldIncludeTranslationMetafields(operationParameters)) {
+		return mainResult;
+	}
+
+	const resourceNodes = toArrayOfObjects(mainResult.simplified);
+	if (resourceNodes.length === 0) {
+		return mainResult;
+	}
+
+	const collectionNodes = resourceNodes.filter((resourceNode) => {
+		const resourceId = toOptionalString(resourceNode.resourceId);
+		return (
+			getResourceTypeFromGid(resourceId) === 'Collection' &&
+			getNestedMetafieldResources(resourceNode).length === 0
+		);
+	});
+	if (collectionNodes.length === 0) {
+		return mainResult;
+	}
+
+	const collectionIds = Array.from(
+		new Set(
+			collectionNodes
+				.map((resourceNode) => toOptionalString(resourceNode.resourceId))
+				.filter((resourceId): resourceId is string => !!resourceId),
+		),
+	);
+	if (collectionIds.length === 0) {
+		return mainResult;
+	}
+
+	const metafieldLimit = getTranslationMetafieldLimit(operationParameters);
+	const { idsByCollectionId, truncatedCollectionIds } = await fetchCollectionMetafieldIds(
+		executeFunctions,
+		collectionIds,
+		metafieldLimit,
+		itemIndex,
+	);
+	const allMetafieldIds = Array.from(
+		new Set(
+			Array.from(idsByCollectionId.values()).flatMap((metafieldIds) => metafieldIds),
+		),
+	);
+	if (allMetafieldIds.length === 0) {
+		return {
+			...mainResult,
+			raw: {
+				...mainResult.raw,
+				translationCollectionMetafieldFallback: {
+					applied: true,
+					collectionIds,
+					metafieldLimit,
+					discoveredMetafieldCount: 0,
+					hydratedMetafieldCount: 0,
+					truncatedCollectionIds,
+				},
+			},
+		};
+	}
+
+	const targetLocale = toOptionalString(operationParameters.locale);
+	if (!targetLocale) {
+		return mainResult;
+	}
+
+	const targetMarketId = getRequestedTranslationMarketId(operationParameters);
+	const outdated = getTranslationOutdatedFilter(operationParameters);
+	const translationResourcesById = await fetchTranslationResourcesByIds(
+		executeFunctions,
+		allMetafieldIds,
+		targetLocale,
+		targetMarketId,
+		outdated,
+		itemIndex,
+	);
+	const hydratedNodes = resourceNodes.map((resourceNode) => {
+		const resourceId = toOptionalString(resourceNode.resourceId);
+		if (
+			getResourceTypeFromGid(resourceId) !== 'Collection' ||
+			getNestedMetafieldResources(resourceNode).length > 0 ||
+			!resourceId
+		) {
+			return resourceNode;
+		}
+
+		const metafieldResources = (idsByCollectionId.get(resourceId) ?? [])
+			.map((metafieldId) => translationResourcesById.get(metafieldId))
+			.filter((metafieldResource): metafieldResource is IDataObject => isObject(metafieldResource))
+			.map((metafieldResource) => ({ ...metafieldResource }));
+		if (metafieldResources.length === 0) {
+			return resourceNode;
+		}
+
+		return {
+			...resourceNode,
+			metafields: metafieldResources,
+		};
+	});
+
+	return {
+		simplified: Array.isArray(mainResult.simplified)
+			? hydratedNodes
+			: hydratedNodes[0] ?? mainResult.simplified,
+		raw: {
+			...mainResult.raw,
+			translationCollectionMetafieldFallback: {
+				applied: true,
+				collectionIds,
+				metafieldLimit,
+				discoveredMetafieldCount: allMetafieldIds.length,
+				hydratedMetafieldCount: translationResourcesById.size,
+				truncatedCollectionIds,
+			},
+		},
+	};
 }
 
 async function validateTranslationParameters(
@@ -1367,10 +1609,19 @@ async function runTranslationCoverageOperation(
 			},
 			itemIndex,
 		);
-		rawByLocale[targetLocale] = localeResult.raw;
+		const localeResultWithCollectionMetafields = await maybeHydrateCollectionTranslationMetafields(
+			executeFunctions,
+			{
+				...operationParameters,
+				locale: targetLocale,
+			},
+			localeResult,
+			itemIndex,
+		);
+		rawByLocale[targetLocale] = localeResultWithCollectionMetafields.raw;
 
-		const resourceTrees = toArrayOfObjects(localeResult.simplified).map((resourceNode) =>
-			buildTranslationResourceTree(resourceNode, targetLocale, targetMarketId),
+		const resourceTrees = toArrayOfObjects(localeResultWithCollectionMetafields.simplified).map(
+			(resourceNode) => buildTranslationResourceTree(resourceNode, targetLocale, targetMarketId),
 		);
 		for (const resourceTree of resourceTrees) {
 			flattenTranslationResourceTree(resourceTree, localeRows);
@@ -1712,12 +1963,21 @@ export class ShopifyCustom implements INodeType {
 								operationParameters,
 								itemIndex,
 							);
+				const resultWithCollectionTranslationMetafields =
+					resource === 'translation' && (operation === 'get' || operation === 'getMany')
+						? await maybeHydrateCollectionTranslationMetafields(
+								this,
+								operationParameters,
+								mainResult,
+								itemIndex,
+							)
+						: mainResult;
 				const resultWithTranslationMetadata = await maybeEnrichTranslationMetafieldMetadata(
 					this,
 					resource,
 					operation,
 					operationParameters,
-					mainResult,
+					resultWithCollectionTranslationMetafields,
 					itemIndex,
 				);
 				const resultWithTranslationShape = maybeShapeTranslationOutput(

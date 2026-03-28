@@ -232,3 +232,57 @@ query TranslationMarketsFromLocales {
 	}
 }
 `;
+
+export const TRANSLATION_COLLECTION_METAFIELD_IDS_QUERY = `
+query TranslationCollectionMetafieldIds($collectionIds: [ID!]!, $metafieldsFirst: Int!) {
+	nodes(ids: $collectionIds) {
+		... on Collection {
+			id
+			metafields(first: $metafieldsFirst) {
+				nodes {
+					id
+				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
+			}
+		}
+	}
+}
+`;
+
+export const TRANSLATION_RESOURCES_BY_IDS_QUERY = `
+query TranslationResourcesByIds(
+	$resourceIds: [ID!]!
+	$first: Int!
+	$locale: String!
+	$marketId: ID
+	$includeMarketContext: Boolean!
+	$outdated: Boolean
+) {
+	translatableResourcesByIds(resourceIds: $resourceIds, first: $first) {
+		nodes {
+			resourceId
+			translatableContent {
+				${TRANSLATABLE_CONTENT_FIELDS}
+			}
+			marketTranslatableContent: translatableContent(marketId: $marketId)
+				@include(if: $includeMarketContext) {
+				${TRANSLATABLE_CONTENT_FIELDS}
+			}
+			globalTranslations: translations(locale: $locale, outdated: $outdated) {
+				${TRANSLATION_FIELDS}
+			}
+			marketTranslations: translations(locale: $locale, marketId: $marketId, outdated: $outdated)
+				@include(if: $includeMarketContext) {
+				${TRANSLATION_FIELDS}
+			}
+		}
+		pageInfo {
+			hasNextPage
+			endCursor
+		}
+	}
+}
+`;
