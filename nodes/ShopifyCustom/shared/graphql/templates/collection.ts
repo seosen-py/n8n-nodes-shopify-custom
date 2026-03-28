@@ -20,6 +20,7 @@ mutation CollectionCreate($input: CollectionInput!) {
 export const COLLECTION_GET_QUERY = `
 query CollectionGet(
 	$id: ID!
+	$includeProductsCount: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -35,6 +36,9 @@ query CollectionGet(
 		seo {
 			${SEO_FIELDS}
 		}
+		productsCount @include(if: $includeProductsCount) {
+			count
+		}
 		updatedAt
 		${OPTIONAL_METAFIELDS_CONNECTION}
 	}
@@ -48,6 +52,7 @@ query CollectionGetMany(
 	$query: String
 	$sortKey: CollectionSortKeys
 	$reverse: Boolean
+	$includeProductsCount: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -61,6 +66,9 @@ query CollectionGetMany(
 			handle
 			seo {
 				${SEO_FIELDS}
+			}
+			productsCount @include(if: $includeProductsCount) {
+				count
 			}
 			updatedAt
 			${OPTIONAL_METAFIELDS_CONNECTION}

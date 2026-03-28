@@ -1331,6 +1331,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: COLLECTION_GET_QUERY,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.collectionId),
+			includeProductsCount: asBoolean(parameters.includeProductsCount),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['collection']),
@@ -1339,6 +1340,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: COLLECTION_GET_MANY_QUERY,
 		buildVariables: (parameters) => ({
 			...getConnectionVariables(parameters),
+			includeProductsCount: asBoolean(parameters.includeProductsCount),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['collections']),

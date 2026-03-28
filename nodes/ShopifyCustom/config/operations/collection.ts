@@ -75,6 +75,14 @@ function collectionBaseFields(): INodeProperties[] {
 	];
 }
 
+const INCLUDE_PRODUCTS_COUNT_FIELD: INodeProperties = {
+	displayName: 'Include Products Count',
+	name: 'includeProductsCount',
+	type: 'boolean',
+	default: false,
+	description: 'Whether to also fetch the number of products assigned to the collection',
+};
+
 function collectionCreateFields(): INodeProperties[] {
 	return [
 		...collectionBaseFields(),
@@ -286,6 +294,7 @@ export const COLLECTION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		registryKey: 'collection.get',
 		fields: [
 			gidField('collectionId', 'Collection ID', 'Global collection ID in Shopify'),
+			INCLUDE_PRODUCTS_COUNT_FIELD,
 			...readMetafieldsFields(),
 		],
 	},
@@ -295,7 +304,7 @@ export const COLLECTION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many collections',
 		registryKey: 'collection.getMany',
-		fields: paginationFields(COLLECTION_SORT_OPTIONS),
+		fields: [INCLUDE_PRODUCTS_COUNT_FIELD, ...paginationFields(COLLECTION_SORT_OPTIONS)],
 	},
 	{
 		resource: 'collection',
