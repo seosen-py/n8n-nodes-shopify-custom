@@ -840,6 +840,18 @@ function getTranslationOptions(parameters: IDataObject): IDataObject {
 	return {};
 }
 
+function getTranslationMarketId(parameters: IDataObject, options: IDataObject): string | undefined {
+	return asString(parameters.marketId) ?? asString(options.marketId);
+}
+
+function getTranslationIncludeMetafields(options: IDataObject): boolean {
+	return Boolean(options.includeMetafields ?? options.includeNestedResources);
+}
+
+function getTranslationMetafieldLimit(options: IDataObject): number {
+	return Math.max(1, Math.trunc(asNumber(options.metafieldLimit ?? options.nestedLimit) ?? 50));
+}
+
 function getInventoryReadOptions(parameters: IDataObject): IDataObject {
 	if (isObject(parameters.inventoryReadOptions)) {
 		return parameters.inventoryReadOptions;
@@ -1660,14 +1672,15 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: TRANSLATION_GET_QUERY,
 		buildVariables: (parameters) => {
 			const options = getTranslationOptions(parameters);
+			const marketId = getTranslationMarketId(parameters, options);
 			return {
 				resourceId: asString(parameters.resourceId),
 				locale: asString(parameters.locale),
-				marketId: asString(options.marketId),
+				marketId,
+				includeMarketContext: Boolean(marketId),
 				outdated: getTranslationOutdatedFilter(options),
-				includeNestedResources: Boolean(options.includeNestedResources),
-				nestedResourceType: asString(options.nestedResourceType),
-				nestedFirst: Math.max(1, Math.trunc(asNumber(options.nestedLimit) ?? 50)),
+				includeMetafields: getTranslationIncludeMetafields(options),
+				metafieldsFirst: getTranslationMetafieldLimit(options),
 			};
 		},
 		mapSimplified: (data) => mapSingleNode(data, ['translatableResource']),
@@ -1677,17 +1690,18 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		buildVariables: (parameters) => {
 			const options = getTranslationOptions(parameters);
 			const limit = asNumber(parameters.limit) ?? 50;
+			const marketId = getTranslationMarketId(parameters, options);
 			return {
 				resourceType: asString(parameters.resourceType),
 				first: Math.max(1, Math.trunc(limit)),
 				after: asString(options.afterCursor),
 				reverse: asBoolean(options.reverse),
 				locale: asString(parameters.locale),
-				marketId: asString(options.marketId),
+				marketId,
+				includeMarketContext: Boolean(marketId),
 				outdated: getTranslationOutdatedFilter(options),
-				includeNestedResources: Boolean(options.includeNestedResources),
-				nestedResourceType: asString(options.nestedResourceType),
-				nestedFirst: Math.max(1, Math.trunc(asNumber(options.nestedLimit) ?? 50)),
+				includeMetafields: getTranslationIncludeMetafields(options),
+				metafieldsFirst: getTranslationMetafieldLimit(options),
 			};
 		},
 		mapSimplified: (data) => mapNodesFromConnection(data, ['translatableResources']),

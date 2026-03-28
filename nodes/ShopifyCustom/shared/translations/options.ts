@@ -1,4 +1,9 @@
-import type { IDataObject, ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
+import type {
+	IDataObject,
+	IExecuteFunctions,
+	ILoadOptionsFunctions,
+	INodePropertyOptions,
+} from 'n8n-workflow';
 import { assertNoGraphQLErrors, executeShopifyGraphql } from '../graphql/client';
 import {
 	TRANSLATION_MARKETS_FROM_LOCALES_QUERY,
@@ -6,7 +11,9 @@ import {
 	TRANSLATION_SHOP_LOCALES_QUERY,
 } from '../graphql/templates/translations';
 
-interface IShopLocale {
+type ShopifyTranslationContext = ILoadOptionsFunctions | IExecuteFunctions;
+
+export interface IShopLocale {
 	locale: string;
 	name: string;
 	primary: boolean;
@@ -17,7 +24,7 @@ interface IShopLocalesResponse {
 	shopLocales: IShopLocale[];
 }
 
-interface IMarketNode {
+export interface IMarketNode {
 	id: string;
 	name: string;
 	status: string;
@@ -62,7 +69,7 @@ function getCacheKey(credentials: IDataObject): string {
 }
 
 async function getCacheKeyFromCredentials(
-	context: ILoadOptionsFunctions,
+	context: ShopifyTranslationContext,
 ): Promise<string | undefined> {
 	try {
 		const credentials = (await context.getCredentials('shopifyCustomAdminApi')) as IDataObject;
@@ -123,7 +130,7 @@ function dedupeMarkets(markets: IMarketNode[]): IMarketNode[] {
 	return Array.from(uniqueMarkets.values());
 }
 
-async function fetchShopLocales(context: ILoadOptionsFunctions): Promise<IShopLocale[]> {
+async function fetchShopLocales(context: ShopifyTranslationContext): Promise<IShopLocale[]> {
 	try {
 		const response = await executeShopifyGraphql<IShopLocalesResponse>(
 			context,
@@ -138,24 +145,16 @@ async function fetchShopLocales(context: ILoadOptionsFunctions): Promise<IShopLo
 	}
 }
 
-export async function getShopLocaleOptions(
-	context: ILoadOptionsFunctions,
-): Promise<INodePropertyOptions[]> {
+export async function getShopLocales(context: ShopifyTranslationContext): Promise<IShopLocale[]> {
 	const cacheKey = await getCacheKeyFromCredentials(context);
 	if (!cacheKey) {
 		return [];
 	}
 
 	const now = Date.now();
-
 	const cacheEntry = LOCALES_CACHE.get(cacheKey);
 	if (cacheEntry && cacheEntry.expiresAt > now) {
-		return cacheEntry.data
-			.map((locale) => ({
-				name: toLocaleLabel(locale),
-				value: locale.locale,
-			}))
-			.sort((a, b) => a.name.localeCompare(b.name));
+		return cacheEntry.data;
 	}
 
 	const locales = dedupeLocales(await fetchShopLocales(context));
@@ -168,6 +167,17 @@ export async function getShopLocaleOptions(
 		data: locales,
 	});
 
+	return locales;
+}
+
+export async function getShopLocaleOptions(
+	context: ShopifyTranslationContext,
+): Promise<INodePropertyOptions[]> {
+	const locales = await getShopLocales(context);
+	if (locales.length === 0) {
+		return [];
+	}
+
 	return locales
 		.map((locale) => ({
 			name: toLocaleLabel(locale),
@@ -176,9 +186,7 @@ export async function getShopLocaleOptions(
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function getMarketOptions(
-	context: ILoadOptionsFunctions,
-): Promise<INodePropertyOptions[]> {
+export async function getMarkets(context: ShopifyTranslationContext): Promise<IMarketNode[]> {
 	const cacheKey = await getCacheKeyFromCredentials(context);
 	if (!cacheKey) {
 		return [];
@@ -188,12 +196,7 @@ export async function getMarketOptions(
 
 	const cacheEntry = MARKETS_CACHE.get(cacheKey);
 	if (cacheEntry && cacheEntry.expiresAt > now) {
-		return cacheEntry.data
-			.map((market) => ({
-				name: `${market.name} (${market.status})`,
-				value: market.id,
-			}))
-			.sort((a, b) => a.name.localeCompare(b.name));
+		return cacheEntry.data;
 	}
 
 	const markets: IMarketNode[] = [];
@@ -257,12 +260,7 @@ export async function getMarketOptions(
 			data: dedupedFallbackMarkets,
 		});
 
-		return dedupedFallbackMarkets
-			.map((market) => ({
-				name: `${market.name} (${market.status})`,
-				value: market.id,
-			}))
-			.sort((a, b) => a.name.localeCompare(b.name));
+		return dedupedFallbackMarkets;
 	}
 
 	const dedupedMarkets = dedupeMarkets(markets);
@@ -272,7 +270,14 @@ export async function getMarketOptions(
 		data: dedupedMarkets,
 	});
 
-	return dedupedMarkets
+	return dedupedMarkets;
+}
+
+export async function getMarketOptions(
+	context: ShopifyTranslationContext,
+): Promise<INodePropertyOptions[]> {
+	const markets = await getMarkets(context);
+	return markets
 		.map((market) => ({
 			name: `${market.name} (${market.status})`,
 			value: market.id,

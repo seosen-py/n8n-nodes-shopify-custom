@@ -36,7 +36,11 @@ import { getMetafieldDefinitionTypeOptions } from './shared/metafields/types';
 import { buildStandaloneMetafieldValueFields } from './shared/metafields/uiFactory';
 import { buildMetafieldsDeletePayload, buildMetafieldsSetPayload } from './shared/metafields/valuePayload';
 import { mapOutputItems, type ShopifyOutputMode } from './shared/output/outputMapper';
-import { getMarketOptions, getShopLocaleOptions } from './shared/translations/options';
+import {
+	getMarketOptions,
+	getMarkets,
+	getShopLocaleOptions,
+} from './shared/translations/options';
 
 function isObject(value: unknown): value is IDataObject {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -69,6 +73,15 @@ function toArrayOfObjects(value: unknown): IDataObject[] {
 		return [value];
 	}
 	return [];
+}
+
+function toOptionalString(value: unknown): string | undefined {
+	if (typeof value !== 'string') {
+		return undefined;
+	}
+
+	const normalized = value.trim();
+	return normalized.length > 0 ? normalized : undefined;
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {
@@ -775,10 +788,14 @@ async function maybeEnrichTranslationMetafieldMetadata(
 
 type TranslationOutputShape = 'resources' | 'flattenedAll' | 'flattenedMissing';
 
-function getTranslationOutputShape(operationParameters: IDataObject): TranslationOutputShape {
-	const translationOptions = isObject(operationParameters.translationOptions)
+function getTranslationOptionsFromParameters(operationParameters: IDataObject): IDataObject | undefined {
+	return isObject(operationParameters.translationOptions)
 		? operationParameters.translationOptions
 		: undefined;
+}
+
+function getTranslationOutputShape(operationParameters: IDataObject): TranslationOutputShape {
+	const translationOptions = getTranslationOptionsFromParameters(operationParameters);
 	if (!translationOptions) {
 		return 'resources';
 	}
@@ -791,27 +808,62 @@ function getTranslationOutputShape(operationParameters: IDataObject): Translatio
 	return 'resources';
 }
 
-function getTranslationsByKey(
-	resourceNode: IDataObject,
-	targetLocale: string,
-): Map<string, IDataObject[]> {
-	const translationsByKey = new Map<string, IDataObject[]>();
-	if (!Array.isArray(resourceNode.translations)) {
-		return translationsByKey;
+function getRequestedTranslationMarketId(operationParameters: IDataObject): string | undefined {
+	const translationOptions = getTranslationOptionsFromParameters(operationParameters);
+	return toOptionalString(operationParameters.marketId) ?? toOptionalString(translationOptions?.marketId);
+}
+
+async function maybeResolveTranslationMarketSelection(
+	executeFunctions: IExecuteFunctions,
+	resource: ShopifyResourceValue,
+	operation: string,
+	operationParameters: IDataObject,
+	itemIndex: number,
+): Promise<IDataObject> {
+	if (resource !== 'translation' || (operation !== 'get' && operation !== 'getMany')) {
+		return operationParameters;
 	}
 
-	for (const translation of resourceNode.translations) {
+	const explicitMarketId = getRequestedTranslationMarketId(operationParameters);
+	if (explicitMarketId) {
+		return {
+			...operationParameters,
+			marketId: explicitMarketId,
+		};
+	}
+
+	const markets = await getMarkets(executeFunctions);
+	if (markets.length === 0) {
+		return operationParameters;
+	}
+
+	const activeMarkets = markets.filter((market) => market.status === 'ACTIVE');
+	const candidateMarkets = activeMarkets.length > 0 ? activeMarkets : markets;
+	if (candidateMarkets.length === 1) {
+		return {
+			...operationParameters,
+			marketId: candidateMarkets[0].id,
+		};
+	}
+
+	throw new NodeOperationError(
+		executeFunctions.getNode(),
+		'Market is required for Translation Get/Get Many when the shop has multiple markets',
+		{ itemIndex },
+	);
+}
+
+function getTranslationsByKey(
+	translations: IDataObject[],
+): Map<string, IDataObject[]> {
+	const translationsByKey = new Map<string, IDataObject[]>();
+	for (const translation of translations) {
 		if (!isObject(translation)) {
 			continue;
 		}
 
 		const key = translation.key;
 		if (typeof key !== 'string' || !key) {
-			continue;
-		}
-
-		const locale = translation.locale;
-		if (targetLocale && typeof locale === 'string' && locale && locale !== targetLocale) {
 			continue;
 		}
 
@@ -823,31 +875,137 @@ function getTranslationsByKey(
 	return translationsByKey;
 }
 
+function getTranslatableContentByKey(contentItems: IDataObject[]): Map<string, IDataObject> {
+	const contentByKey = new Map<string, IDataObject>();
+	for (const contentItem of contentItems) {
+		if (!isObject(contentItem)) {
+			continue;
+		}
+
+		const key = contentItem.key;
+		if (typeof key !== 'string' || !key || contentByKey.has(key)) {
+			continue;
+		}
+
+		contentByKey.set(key, { ...contentItem });
+	}
+
+	return contentByKey;
+}
+
 function pickRepresentativeTranslation(translations: IDataObject[]): IDataObject | undefined {
 	if (translations.length === 0) {
 		return undefined;
 	}
 
-	const nonMarketTranslation = translations.find(
-		(translation) => !isObject(translation.market),
+	const marketSpecificTranslation = translations.find(
+		(translation) => isObject(translation.market),
 	);
-	return nonMarketTranslation ?? translations[0];
+	return marketSpecificTranslation ?? translations[0];
 }
 
-function flattenTranslationRowsForResource(
+function buildEffectiveTranslations(
+	globalTranslations: IDataObject[],
+	marketTranslations: IDataObject[],
+	useMarketContext: boolean,
+): IDataObject[] {
+	if (!useMarketContext) {
+		return globalTranslations.map((translation) => ({ ...translation }));
+	}
+
+	const globalTranslationsByKey = getTranslationsByKey(globalTranslations);
+	const marketTranslationsByKey = getTranslationsByKey(marketTranslations);
+	const keys = new Set<string>([
+		...globalTranslationsByKey.keys(),
+		...marketTranslationsByKey.keys(),
+	]);
+	const effectiveTranslations: IDataObject[] = [];
+
+	for (const key of keys) {
+		const marketTranslationsForKey = marketTranslationsByKey.get(key) ?? [];
+		const globalTranslationsForKey = globalTranslationsByKey.get(key) ?? [];
+		const preferredTranslations =
+			marketTranslationsForKey.length > 0 ? marketTranslationsForKey : globalTranslationsForKey;
+		effectiveTranslations.push(...preferredTranslations.map((translation) => ({ ...translation })));
+	}
+
+	return effectiveTranslations;
+}
+
+function getNestedMetafieldResources(resourceNode: IDataObject): IDataObject[] {
+	if (Array.isArray(resourceNode.metafields)) {
+		return resourceNode.metafields.filter(isObject);
+	}
+
+	const metafieldsConnection = isObject(resourceNode.metafields)
+		? resourceNode.metafields
+		: isObject(resourceNode.nestedTranslatableResources)
+			? resourceNode.nestedTranslatableResources
+			: undefined;
+	return Array.isArray(metafieldsConnection?.nodes)
+		? metafieldsConnection.nodes.filter(isObject)
+		: [];
+}
+
+function getResourceTypeFromGid(resourceId: string | undefined): string | undefined {
+	if (!resourceId) {
+		return undefined;
+	}
+
+	const gidParts = resourceId.split('/');
+	return gidParts.length >= 4 ? gidParts[3] : undefined;
+}
+
+function appendMetafieldMetadataToRow(row: IDataObject, resourceNode: IDataObject): void {
+	if (!isObject(resourceNode.metafieldMetadata)) {
+		return;
+	}
+
+	const metafieldMetadata = resourceNode.metafieldMetadata;
+	row.metafieldMetadata = metafieldMetadata;
+	row.metafieldNamespace = metafieldMetadata.namespace;
+	row.metafieldKey = metafieldMetadata.key;
+
+	if (isObject(metafieldMetadata.definition)) {
+		row.metafieldDefinitionId = metafieldMetadata.definition.id;
+		row.metafieldDefinitionName = metafieldMetadata.definition.name;
+	}
+
+	if (isObject(metafieldMetadata.owner)) {
+		row.metafieldOwnerId = metafieldMetadata.owner.id;
+		row.metafieldOwnerType = metafieldMetadata.owner.type;
+	}
+}
+
+function buildTranslationFieldsForResource(
 	resourceNode: IDataObject,
 	targetLocale: string,
-	rows: IDataObject[],
-	parentResourceId?: string,
-): void {
-	const resourceId =
-		typeof resourceNode.resourceId === 'string' && resourceNode.resourceId
-			? resourceNode.resourceId
-			: undefined;
-	const translationsByKey = getTranslationsByKey(resourceNode, targetLocale);
+	targetMarketId: string | undefined,
+): IDataObject[] {
 	const translatableContentItems = Array.isArray(resourceNode.translatableContent)
 		? resourceNode.translatableContent.filter(isObject)
 		: [];
+	const marketTranslatableContentItems = Array.isArray(resourceNode.marketTranslatableContent)
+		? resourceNode.marketTranslatableContent.filter(isObject)
+		: [];
+	const marketTranslatableContentByKey = getTranslatableContentByKey(marketTranslatableContentItems);
+	const globalTranslations = Array.isArray(resourceNode.globalTranslations)
+		? resourceNode.globalTranslations.filter(isObject)
+		: Array.isArray(resourceNode.translations)
+			? resourceNode.translations.filter(isObject)
+			: [];
+	const marketTranslations = Array.isArray(resourceNode.marketTranslations)
+		? resourceNode.marketTranslations.filter(isObject)
+		: [];
+	const effectiveTranslations = buildEffectiveTranslations(
+		globalTranslations,
+		marketTranslations,
+		!!targetMarketId,
+	);
+	const globalTranslationsByKey = getTranslationsByKey(globalTranslations);
+	const marketTranslationsByKey = getTranslationsByKey(marketTranslations);
+	const effectiveTranslationsByKey = getTranslationsByKey(effectiveTranslations);
+	const fields: IDataObject[] = [];
 
 	for (const contentItem of translatableContentItems) {
 		const key = contentItem.key;
@@ -855,10 +1013,13 @@ function flattenTranslationRowsForResource(
 			continue;
 		}
 
-		const keyTranslations = translationsByKey.get(key) ?? [];
+		const globalTranslationsForKey = globalTranslationsByKey.get(key) ?? [];
+		const marketTranslationsForKey = marketTranslationsByKey.get(key) ?? [];
+		const keyTranslations = effectiveTranslationsByKey.get(key) ?? [];
 		const representative = pickRepresentativeTranslation(keyTranslations);
 		const sourceLocale =
 			typeof contentItem.locale === 'string' ? contentItem.locale : undefined;
+		const marketContentItem = marketTranslatableContentByKey.get(key);
 		const usesSourceLocaleAsTarget =
 			keyTranslations.length === 0 &&
 			typeof targetLocale === 'string' &&
@@ -871,56 +1032,129 @@ function flattenTranslationRowsForResource(
 				: usesSourceLocaleAsTarget
 					? 'source'
 					: 'missing';
+		const translationSource =
+			keyTranslations.length > 0
+				? marketTranslationsForKey.length > 0
+					? 'market'
+					: 'global'
+				: usesSourceLocaleAsTarget
+					? 'source'
+					: 'missing';
 
-		const row: IDataObject = {
-			resourceId,
-			parentResourceId: parentResourceId ?? null,
-			resourceLevel: parentResourceId ? 'nested' : 'root',
+		const field: IDataObject = {
 			key,
 			sourceValue: contentItem.value,
 			sourceLocale,
 			sourceType: contentItem.type,
 			translatableContentDigest: contentItem.digest,
 			targetLocale,
+			targetMarketId: targetMarketId ?? null,
 			translationStatus,
+			translationSource,
 			translationCount: keyTranslations.length,
+			globalTranslationCount: globalTranslationsForKey.length,
+			marketTranslationCount: marketTranslationsForKey.length,
 		};
+		if (marketContentItem) {
+			field.marketSourceValue = marketContentItem.value;
+			field.marketSourceLocale =
+				typeof marketContentItem.locale === 'string' ? marketContentItem.locale : undefined;
+			field.marketTranslatableContentDigest = marketContentItem.digest;
+		}
 
 		if (representative) {
-			row.translatedValue = representative.value;
-			row.translatedUpdatedAt = representative.updatedAt;
-			row.translatedOutdated = representative.outdated;
+			field.translatedValue = representative.value;
+			field.translatedUpdatedAt = representative.updatedAt;
+			field.translatedOutdated = representative.outdated;
 			if (isObject(representative.market)) {
-				row.translatedMarketId = representative.market.id;
-				row.translatedMarketName = representative.market.name;
+				field.translatedMarketId = representative.market.id;
+				field.translatedMarketName = representative.market.name;
 			}
 		}
 		if (!representative && usesSourceLocaleAsTarget) {
-			row.translatedValue = contentItem.value;
-			row.translatedOutdated = false;
+			field.translatedValue = contentItem.value;
+			field.translatedOutdated = false;
 		}
 
+		if (globalTranslationsForKey.length > 0) {
+			field.globalTranslations = globalTranslationsForKey;
+		}
+		if (marketTranslationsForKey.length > 0) {
+			field.marketTranslations = marketTranslationsForKey;
+		}
 		if (keyTranslations.length > 0) {
-			row.translations = keyTranslations;
+			field.translations = keyTranslations;
 		}
 
+		fields.push(field);
+	}
+
+	return fields;
+}
+
+function buildTranslationResourceTree(
+	resourceNode: IDataObject,
+	targetLocale: string,
+	targetMarketId: string | undefined,
+	parentResourceId?: string,
+): IDataObject {
+	const resourceId = toOptionalString(resourceNode.resourceId);
+	const fields = buildTranslationFieldsForResource(resourceNode, targetLocale, targetMarketId);
+	const metafields = getNestedMetafieldResources(resourceNode).map((metafieldResource) =>
+		buildTranslationResourceTree(metafieldResource, targetLocale, targetMarketId, resourceId),
+	);
+
+	const resourceTree: IDataObject = {
+		resourceId: resourceId ?? null,
+		resourceType: getResourceTypeFromGid(resourceId) ?? null,
+		parentResourceId: parentResourceId ?? null,
+		resourceLevel: parentResourceId ? 'nested' : 'root',
+		requestedLocale: targetLocale || null,
+		requestedMarketId: targetMarketId ?? null,
+		fieldCount: fields.length,
+		translatedFieldCount: fields.filter((field) => field.translationStatus === 'translated').length,
+		sourceFieldCount: fields.filter((field) => field.translationStatus === 'source').length,
+		missingFieldCount: fields.filter((field) => field.translationStatus === 'missing').length,
+		fields,
+	};
+
+	if (isObject(resourceNode.metafieldMetadata)) {
+		resourceTree.metafieldMetadata = resourceNode.metafieldMetadata;
+	}
+	if (metafields.length > 0) {
+		resourceTree.metafields = metafields;
+	}
+
+	return resourceTree;
+}
+
+function flattenTranslationResourceTree(resourceTree: IDataObject, rows: IDataObject[]): void {
+	const resourceId = toOptionalString(resourceTree.resourceId);
+	const parentResourceId = toOptionalString(resourceTree.parentResourceId);
+	const resourceType = toOptionalString(resourceTree.resourceType);
+	const requestedLocale = toOptionalString(resourceTree.requestedLocale);
+	const requestedMarketId = toOptionalString(resourceTree.requestedMarketId);
+	const fields = Array.isArray(resourceTree.fields) ? resourceTree.fields.filter(isObject) : [];
+
+	for (const field of fields) {
+		const row: IDataObject = {
+			resourceId: resourceId ?? null,
+			resourceType: resourceType ?? null,
+			parentResourceId: parentResourceId ?? null,
+			resourceLevel: resourceTree.resourceLevel,
+			requestedLocale: requestedLocale ?? null,
+			requestedMarketId: requestedMarketId ?? null,
+			...field,
+		};
+		appendMetafieldMetadataToRow(row, resourceTree);
 		rows.push(row);
 	}
 
-	const nestedConnection = isObject(resourceNode.nestedTranslatableResources)
-		? resourceNode.nestedTranslatableResources
-		: undefined;
-	const nestedResources = Array.isArray(nestedConnection?.nodes)
-		? nestedConnection.nodes.filter(isObject)
+	const metafields = Array.isArray(resourceTree.metafields)
+		? resourceTree.metafields.filter(isObject)
 		: [];
-	const nestedParentResourceId = resourceId ?? parentResourceId;
-	for (const nestedResource of nestedResources) {
-		flattenTranslationRowsForResource(
-			nestedResource,
-			targetLocale,
-			rows,
-			nestedParentResourceId,
-		);
+	for (const metafieldResource of metafields) {
+		flattenTranslationResourceTree(metafieldResource, rows);
 	}
 }
 
@@ -935,18 +1169,28 @@ function maybeShapeTranslationOutput(
 	}
 
 	const outputShape = getTranslationOutputShape(operationParameters);
-	if (outputShape === 'resources') {
-		return mainResult;
-	}
-
 	const targetLocale =
 		typeof operationParameters.locale === 'string' ? operationParameters.locale : '';
-	const resources = toArrayOfObjects(mainResult.simplified);
-	const flattenedRows: IDataObject[] = [];
-	for (const resourceNode of resources) {
-		flattenTranslationRowsForResource(resourceNode, targetLocale, flattenedRows);
+	const targetMarketId = getRequestedTranslationMarketId(operationParameters);
+	const resourceTrees = toArrayOfObjects(mainResult.simplified).map((resourceNode) =>
+		buildTranslationResourceTree(resourceNode, targetLocale, targetMarketId),
+	);
+	if (outputShape === 'resources') {
+		return {
+			simplified: resourceTrees,
+			raw: {
+				...mainResult.raw,
+				translationOutputShape: outputShape,
+				translationResourceCount: resourceTrees.length,
+				translationMarketId: targetMarketId ?? null,
+			},
+		};
 	}
 
+	const flattenedRows: IDataObject[] = [];
+	for (const resourceTree of resourceTrees) {
+		flattenTranslationResourceTree(resourceTree, flattenedRows);
+	}
 	const shapedRows =
 		outputShape === 'flattenedMissing'
 			? flattenedRows.filter((row) => row.translationStatus === 'missing')
@@ -958,6 +1202,8 @@ function maybeShapeTranslationOutput(
 			...mainResult.raw,
 			translationOutputShape: outputShape,
 			translationOutputRows: shapedRows.length,
+			translationResourceCount: resourceTrees.length,
+			translationMarketId: targetMarketId ?? null,
 		},
 	};
 }
@@ -1126,7 +1372,7 @@ export class ShopifyCustom implements INodeType {
 					);
 				}
 
-				const operationParameters = getOperationParameters(
+				let operationParameters = getOperationParameters(
 					this,
 					resource,
 					operation,
@@ -1176,6 +1422,14 @@ export class ShopifyCustom implements INodeType {
 				if (resource === 'metafieldDefinition' && operation === 'list') {
 					operationParameters.afterCursor = '';
 				}
+
+				operationParameters = await maybeResolveTranslationMarketSelection(
+					this,
+					resource,
+					operation,
+					operationParameters,
+					itemIndex,
+				);
 
 				const mainResult =
 					resource === 'file' && operation === 'deleteUnusedImages'

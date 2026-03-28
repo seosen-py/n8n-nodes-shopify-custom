@@ -31,29 +31,48 @@ query TranslationGet(
 	$resourceId: ID!
 	$locale: String!
 	$marketId: ID
+	$includeMarketContext: Boolean!
 	$outdated: Boolean
-	$includeNestedResources: Boolean!
-	$nestedResourceType: TranslatableResourceType
-	$nestedFirst: Int!
+	$includeMetafields: Boolean!
+	$metafieldsFirst: Int!
 ) {
 	translatableResource(resourceId: $resourceId) {
 		resourceId
-		translatableContent(marketId: $marketId) {
+		translatableContent {
 			${TRANSLATABLE_CONTENT_FIELDS}
 		}
-		translations(locale: $locale, marketId: $marketId, outdated: $outdated) {
+		marketTranslatableContent: translatableContent(marketId: $marketId)
+			@include(if: $includeMarketContext) {
+			${TRANSLATABLE_CONTENT_FIELDS}
+		}
+		globalTranslations: translations(locale: $locale, outdated: $outdated) {
 			${TRANSLATION_FIELDS}
 		}
-		nestedTranslatableResources(
-			resourceType: $nestedResourceType
-			first: $nestedFirst
-		) @include(if: $includeNestedResources) {
+		marketTranslations: translations(locale: $locale, marketId: $marketId, outdated: $outdated)
+			@include(if: $includeMarketContext) {
+			${TRANSLATION_FIELDS}
+		}
+		metafields: nestedTranslatableResources(
+			resourceType: METAFIELD
+			first: $metafieldsFirst
+		) @include(if: $includeMetafields) {
 			nodes {
 				resourceId
-				translatableContent(marketId: $marketId) {
+				translatableContent {
 					${TRANSLATABLE_CONTENT_FIELDS}
 				}
-				translations(locale: $locale, marketId: $marketId, outdated: $outdated) {
+				marketTranslatableContent: translatableContent(marketId: $marketId)
+					@include(if: $includeMarketContext) {
+					${TRANSLATABLE_CONTENT_FIELDS}
+				}
+				globalTranslations: translations(locale: $locale, outdated: $outdated) {
+					${TRANSLATION_FIELDS}
+				}
+				marketTranslations: translations(
+					locale: $locale
+					marketId: $marketId
+					outdated: $outdated
+				) @include(if: $includeMarketContext) {
 					${TRANSLATION_FIELDS}
 				}
 			}
@@ -74,10 +93,10 @@ query TranslationGetMany(
 	$reverse: Boolean
 	$locale: String!
 	$marketId: ID
+	$includeMarketContext: Boolean!
 	$outdated: Boolean
-	$includeNestedResources: Boolean!
-	$nestedResourceType: TranslatableResourceType
-	$nestedFirst: Int!
+	$includeMetafields: Boolean!
+	$metafieldsFirst: Int!
 ) {
 	translatableResources(
 		resourceType: $resourceType
@@ -87,22 +106,41 @@ query TranslationGetMany(
 	) {
 		nodes {
 			resourceId
-			translatableContent(marketId: $marketId) {
+			translatableContent {
 				${TRANSLATABLE_CONTENT_FIELDS}
 			}
-			translations(locale: $locale, marketId: $marketId, outdated: $outdated) {
+			marketTranslatableContent: translatableContent(marketId: $marketId)
+				@include(if: $includeMarketContext) {
+				${TRANSLATABLE_CONTENT_FIELDS}
+			}
+			globalTranslations: translations(locale: $locale, outdated: $outdated) {
 				${TRANSLATION_FIELDS}
 			}
-			nestedTranslatableResources(
-				resourceType: $nestedResourceType
-				first: $nestedFirst
-			) @include(if: $includeNestedResources) {
+			marketTranslations: translations(locale: $locale, marketId: $marketId, outdated: $outdated)
+				@include(if: $includeMarketContext) {
+				${TRANSLATION_FIELDS}
+			}
+			metafields: nestedTranslatableResources(
+				resourceType: METAFIELD
+				first: $metafieldsFirst
+			) @include(if: $includeMetafields) {
 				nodes {
 					resourceId
-					translatableContent(marketId: $marketId) {
+					translatableContent {
 						${TRANSLATABLE_CONTENT_FIELDS}
 					}
-					translations(locale: $locale, marketId: $marketId, outdated: $outdated) {
+					marketTranslatableContent: translatableContent(marketId: $marketId)
+						@include(if: $includeMarketContext) {
+						${TRANSLATABLE_CONTENT_FIELDS}
+					}
+					globalTranslations: translations(locale: $locale, outdated: $outdated) {
+						${TRANSLATION_FIELDS}
+					}
+					marketTranslations: translations(
+						locale: $locale
+						marketId: $marketId
+						outdated: $outdated
+					) @include(if: $includeMarketContext) {
 						${TRANSLATION_FIELDS}
 					}
 				}

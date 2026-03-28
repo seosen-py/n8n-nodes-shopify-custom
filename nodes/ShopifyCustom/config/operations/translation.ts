@@ -77,20 +77,19 @@ const TRANSLATION_OUTPUT_SHAPE_FIELD: INodeProperties = {
 	description: 'How to structure translation data for automation workflows',
 	options: [
 		{
-			name: 'Resource Objects',
+			name: 'Resource Tree',
 			value: 'resources',
-			description: 'Return Shopify resources with translatableContent and translations arrays',
+			description: 'Return resources with per-field translation status and nested metafields',
 		},
 		{
-			name: 'Flattened Rows (All Keys)',
+			name: 'Field Rows (All)',
 			value: 'flattenedAll',
-			description:
-				'Return one row per translatable key with merged source + translated values',
+			description: 'Return one row per field with source, translation, and status',
 		},
 		{
-			name: 'Flattened Rows (Only Missing)',
+			name: 'Field Rows (Only Missing)',
 			value: 'flattenedMissing',
-			description: 'Return only keys that do not have a translation for the selected locale',
+			description: 'Return only fields that are missing a translation for the selected locale',
 		},
 	],
 };
@@ -202,6 +201,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 				'Global Shopify ID of the translatable resource (for metafields use gid://shopify/Metafield/{id})',
 			),
 			LOCALE_FIELD,
+			MARKET_ID_FIELD,
 			{
 				displayName: 'Options',
 				name: 'translationOptions',
@@ -221,19 +221,17 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						type: 'boolean',
 						default: false,
 						description:
-							'Whether to enrich Metafield resource IDs with namespace, key, definition name, and owner',
+							'Whether to enrich METAFIELD resources with namespace, key, definition name, and owner',
 					},
-					TRANSLATION_OUTPUT_SHAPE_FIELD,
 					{
-						displayName: 'Include Nested Resources',
-						name: 'includeNestedResources',
+						displayName: 'Include Metafields',
+						name: 'includeMetafields',
 						type: 'boolean',
 						default: false,
 					},
-					MARKET_ID_FIELD,
 					{
-						displayName: 'Nested Limit',
-						name: 'nestedLimit',
+						displayName: 'Metafield Limit',
+						name: 'metafieldLimit',
 						type: 'number',
 						default: 50,
 						typeOptions: {
@@ -242,19 +240,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						},
 						displayOptions: {
 							show: {
-								includeNestedResources: [true],
-							},
-						},
-					},
-					{
-						displayName: 'Nested Resource Type',
-						name: 'nestedResourceType',
-						type: 'options',
-						options: TRANSLATABLE_RESOURCE_TYPE_OPTIONS,
-						default: 'METAFIELD',
-						displayOptions: {
-							show: {
-								includeNestedResources: [true],
+								includeMetafields: [true],
 							},
 						},
 					},
@@ -269,6 +255,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 							},
 						},
 					},
+					TRANSLATION_OUTPUT_SHAPE_FIELD,
 				],
 			},
 		],
@@ -289,6 +276,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 				required: true,
 			},
 			LOCALE_FIELD,
+			MARKET_ID_FIELD,
 			{
 				displayName: 'Get All',
 				name: 'getAll',
@@ -338,19 +326,17 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						type: 'boolean',
 						default: false,
 						description:
-							'Whether to enrich Metafield resource IDs with namespace, key, definition name, and owner',
+							'Whether to enrich METAFIELD resources with namespace, key, definition name, and owner',
 					},
-					TRANSLATION_OUTPUT_SHAPE_FIELD,
 					{
-						displayName: 'Include Nested Resources',
-						name: 'includeNestedResources',
+						displayName: 'Include Metafields',
+						name: 'includeMetafields',
 						type: 'boolean',
 						default: false,
 					},
-					MARKET_ID_FIELD,
 					{
-						displayName: 'Nested Limit',
-						name: 'nestedLimit',
+						displayName: 'Metafield Limit',
+						name: 'metafieldLimit',
 						type: 'number',
 						default: 50,
 						typeOptions: {
@@ -359,19 +345,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						},
 						displayOptions: {
 							show: {
-								includeNestedResources: [true],
-							},
-						},
-					},
-					{
-						displayName: 'Nested Resource Type',
-						name: 'nestedResourceType',
-						type: 'options',
-						options: TRANSLATABLE_RESOURCE_TYPE_OPTIONS,
-						default: 'METAFIELD',
-						displayOptions: {
-							show: {
-								includeNestedResources: [true],
+								includeMetafields: [true],
 							},
 						},
 					},
@@ -386,6 +360,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 							},
 						},
 					},
+					TRANSLATION_OUTPUT_SHAPE_FIELD,
 					{
 						displayName: 'Reverse',
 						name: 'reverse',
