@@ -672,7 +672,11 @@ function parseMetafieldIds(value: unknown): string[] | undefined {
 	return ids.length > 0 ? Array.from(new Set(ids)) : undefined;
 }
 
-function parseTranslationRegisterItems(value: unknown): IDataObject[] | undefined {
+function parseTranslationRegisterItems(
+	value: unknown,
+	locale: string | undefined,
+	marketId: string | undefined,
+): IDataObject[] | undefined {
 	if (!isObject(value) || !Array.isArray(value.items)) {
 		return undefined;
 	}
@@ -680,11 +684,9 @@ function parseTranslationRegisterItems(value: unknown): IDataObject[] | undefine
 	const translations = value.items
 		.filter(isObject)
 		.map((item) => {
-			const locale = asString(item.locale);
 			const key = asString(item.key);
 			const translationValue = asString(item.value);
 			const translatableContentDigest = asString(item.translatableContentDigest);
-			const marketId = asString(item.marketId);
 
 			if (!locale || !key || translationValue === undefined || !translatableContentDigest) {
 				return undefined;
@@ -842,6 +844,20 @@ function getTranslationOptions(parameters: IDataObject): IDataObject {
 
 function getTranslationMarketId(parameters: IDataObject, options: IDataObject): string | undefined {
 	return asString(parameters.marketId) ?? asString(options.marketId);
+}
+
+function getTranslationLocale(parameters: IDataObject): string | undefined {
+	return asString(parameters.locale);
+}
+
+function getTranslationScope(parameters: IDataObject): 'global' | 'marketSpecific' {
+	return asString(parameters.translationScope) === 'marketSpecific' ? 'marketSpecific' : 'global';
+}
+
+function getTranslationScopedMarketId(parameters: IDataObject, options: IDataObject): string | undefined {
+	return getTranslationScope(parameters) === 'marketSpecific'
+		? getTranslationMarketId(parameters, options)
+		: undefined;
 }
 
 function getTranslationIncludeMetafields(options: IDataObject): boolean {
@@ -1675,10 +1691,27 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 			const marketId = getTranslationMarketId(parameters, options);
 			return {
 				resourceId: asString(parameters.resourceId),
-				locale: asString(parameters.locale),
+				locale: getTranslationLocale(parameters),
 				marketId,
 				includeMarketContext: Boolean(marketId),
 				outdated: getTranslationOutdatedFilter(options),
+				includeMetafields: getTranslationIncludeMetafields(options),
+				metafieldsFirst: getTranslationMetafieldLimit(options),
+			};
+		},
+		mapSimplified: (data) => mapSingleNode(data, ['translatableResource']),
+	},
+	'translation.coverage': {
+		document: TRANSLATION_GET_QUERY,
+		buildVariables: (parameters) => {
+			const options = getTranslationOptions(parameters);
+			const marketId = getTranslationMarketId(parameters, options);
+			return {
+				resourceId: asString(parameters.resourceId),
+				locale: getTranslationLocale(parameters),
+				marketId,
+				includeMarketContext: Boolean(marketId),
+				outdated: undefined,
 				includeMetafields: getTranslationIncludeMetafields(options),
 				metafieldsFirst: getTranslationMetafieldLimit(options),
 			};
@@ -1696,7 +1729,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 				first: Math.max(1, Math.trunc(limit)),
 				after: asString(options.afterCursor),
 				reverse: asBoolean(options.reverse),
-				locale: asString(parameters.locale),
+				locale: getTranslationLocale(parameters),
 				marketId,
 				includeMarketContext: Boolean(marketId),
 				outdated: getTranslationOutdatedFilter(options),
@@ -1711,10 +1744,19 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 	},
 	'translation.register': {
 		document: TRANSLATION_REGISTER_MUTATION,
-		buildVariables: (parameters) => ({
-			resourceId: asString(parameters.resourceId),
-			translations: parseTranslationRegisterItems(parameters.translationsInput) ?? [],
-		}),
+		buildVariables: (parameters) => {
+			const options = getTranslationOptions(parameters);
+			const locale = getTranslationLocale(parameters);
+			const marketId = getTranslationScopedMarketId(parameters, options);
+			return {
+				resourceId: asString(parameters.resourceId),
+				translations: parseTranslationRegisterItems(
+					parameters.translationsInput,
+					locale,
+					marketId,
+				) ?? [],
+			};
+		},
 		mapSimplified: (data) =>
 			Array.isArray(getPathValue(data, ['translationsRegister', 'translations']))
 				? (getPathValue(data, ['translationsRegister', 'translations']) as unknown[])
@@ -1725,12 +1767,17 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 	},
 	'translation.remove': {
 		document: TRANSLATION_REMOVE_MUTATION,
-		buildVariables: (parameters) => ({
-			resourceId: asString(parameters.resourceId),
-			translationKeys: parseTranslationKeys(parameters.translationKeysInput) ?? [],
-			locales: parseStringArray(parameters.locales) ?? [],
-			marketIds: parseStringArray(parameters.marketIds),
-		}),
+		buildVariables: (parameters) => {
+			const options = getTranslationOptions(parameters);
+			const locale = getTranslationLocale(parameters);
+			const marketId = getTranslationScopedMarketId(parameters, options);
+			return {
+				resourceId: asString(parameters.resourceId),
+				translationKeys: parseTranslationKeys(parameters.translationKeysInput) ?? [],
+				locales: locale ? [locale] : [],
+				marketIds: marketId ? [marketId] : undefined,
+			};
+		},
 		mapSimplified: (data) =>
 			Array.isArray(getPathValue(data, ['translationsRemove', 'translations']))
 				? (getPathValue(data, ['translationsRemove', 'translations']) as unknown[])

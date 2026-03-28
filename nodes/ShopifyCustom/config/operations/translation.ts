@@ -18,11 +18,11 @@ const TRANSLATABLE_RESOURCE_TYPE_OPTIONS = [
 	{ name: 'Metaobject', value: 'METAOBJECT' },
 	{ name: 'Online Store Theme', value: 'ONLINE_STORE_THEME' },
 	{ name: 'Online Store Theme App Embed', value: 'ONLINE_STORE_THEME_APP_EMBED' },
-	{ name: 'Online Store Theme JSON Template', value: 'ONLINE_STORE_THEME_JSON_TEMPLATE' },
 	{
 		name: 'Online Store Theme Locale Content',
 		value: 'ONLINE_STORE_THEME_LOCALE_CONTENT',
 	},
+	{ name: 'Online Store Theme JSON Template', value: 'ONLINE_STORE_THEME_JSON_TEMPLATE' },
 	{ name: 'Online Store Theme Section Group', value: 'ONLINE_STORE_THEME_SECTION_GROUP' },
 	{
 		name: 'Online Store Theme Settings Category',
@@ -44,14 +44,14 @@ const TRANSLATABLE_RESOURCE_TYPE_OPTIONS = [
 	{ name: 'Shop Policy', value: 'SHOP_POLICY' },
 ];
 
-const LOCALE_FIELD: INodeProperties = {
-	displayName: 'Locale Name or ID',
+const TARGET_LOCALE_FIELD: INodeProperties = {
+	displayName: 'Target Locale Name or ID',
 	name: 'locale',
 	type: 'options',
 	description:
 		'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
 	typeOptions: {
-		loadOptionsMethod: 'getShopLocaleOptions',
+		loadOptionsMethod: 'getTranslationTargetLocaleOptions',
 	},
 	default: '',
 	required: true,
@@ -69,6 +69,25 @@ const MARKET_ID_FIELD: INodeProperties = {
 	default: '',
 };
 
+const TRANSLATION_SCOPE_FIELD: INodeProperties = {
+	displayName: 'Translation Scope',
+	name: 'translationScope',
+	type: 'options',
+	default: 'global',
+	options: [
+		{
+			name: 'Global',
+			value: 'global',
+			description: 'Create or remove a locale-wide translation with no market override',
+		},
+		{
+			name: 'Market-Specific',
+			value: 'marketSpecific',
+			description: 'Create or remove a translation override for one market',
+		},
+	],
+};
+
 const TRANSLATION_OUTPUT_SHAPE_FIELD: INodeProperties = {
 	displayName: 'Output Shape',
 	name: 'outputShape',
@@ -79,17 +98,44 @@ const TRANSLATION_OUTPUT_SHAPE_FIELD: INodeProperties = {
 		{
 			name: 'Resource Tree',
 			value: 'resources',
-			description: 'Return resources with per-field translation status and nested metafields',
+			description:
+				'Return resources with per-field source, translation layers, and nested metafields',
 		},
 		{
 			name: 'Field Rows (All)',
 			value: 'flattenedAll',
-			description: 'Return one row per field with source, translation, and status',
+			description: 'Return one row per field with source, translation layers, and effective value',
 		},
 		{
 			name: 'Field Rows (Only Missing)',
 			value: 'flattenedMissing',
 			description: 'Return only fields that are missing a translation for the selected locale',
+		},
+	],
+};
+
+const TRANSLATION_COVERAGE_OUTPUT_SHAPE_FIELD: INodeProperties = {
+	displayName: 'Output Shape',
+	name: 'outputShape',
+	type: 'options',
+	default: 'resources',
+	description: 'How to structure translation coverage data for automation workflows',
+	options: [
+		{
+			name: 'Resource Tree',
+			value: 'resources',
+			description:
+				'Return resources with per-field locale coverage and nested metafields',
+		},
+		{
+			name: 'Field Rows (All)',
+			value: 'flattenedAll',
+			description: 'Return one row per field with translated and missing locale lists',
+		},
+		{
+			name: 'Field Rows (Only Missing)',
+			value: 'flattenedMissing',
+			description: 'Return only fields that are missing at least one target locale',
 		},
 	],
 };
@@ -115,29 +161,6 @@ const REGISTER_TRANSLATIONS_FIELD: INodeProperties = {
 					required: true,
 					description:
 						'Translatable field key. Use Translation -> Get to read available keys and digests first. For METAFIELD resources, use key "value".',
-				},
-				{
-					displayName: 'Locale Name or ID',
-					name: 'locale',
-					type: 'options',
-					description:
-						'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
-					typeOptions: {
-						loadOptionsMethod: 'getShopLocaleOptions',
-					},
-					default: '',
-					required: true,
-				},
-				{
-					displayName: 'Market Name or ID',
-					name: 'marketId',
-					type: 'options',
-					description:
-						'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
-					typeOptions: {
-						loadOptionsMethod: 'getMarketOptions',
-					},
-					default: '',
 				},
 				{
 					displayName: 'Translatable Content Digest',
@@ -192,15 +215,16 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		resource: 'translation',
 		value: 'get',
 		name: 'Get',
-		description: 'Get translatable content and translations for one resource',
+		description:
+			'Get source content plus global, market-specific, and effective translation data for one resource',
 		registryKey: 'translation.get',
 		fields: [
 			gidField(
 				'resourceId',
 				'Resource ID',
-				'Global Shopify ID of the translatable resource (for metafields use gid://shopify/Metafield/{id})',
+				'Global Shopify ID of the exact translatable resource (for metafields use gid://shopify/Metafield/{id})',
 			),
-			LOCALE_FIELD,
+			TARGET_LOCALE_FIELD,
 			MARKET_ID_FIELD,
 			{
 				displayName: 'Options',
@@ -214,6 +238,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						name: 'filterByOutdated',
 						type: 'boolean',
 						default: false,
+						description: 'Whether to request only outdated translations from Shopify',
 					},
 					{
 						displayName: 'Include Metafield Metadata',
@@ -228,6 +253,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						name: 'includeMetafields',
 						type: 'boolean',
 						default: false,
+						description: 'Whether to include nested metafields under the resource',
 					},
 					{
 						displayName: 'Metafield Limit',
@@ -249,6 +275,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						name: 'outdated',
 						type: 'boolean',
 						default: true,
+						description: 'Whether to return outdated translations when filtering by outdated',
 						displayOptions: {
 							show: {
 								filterByOutdated: [true],
@@ -264,7 +291,8 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		resource: 'translation',
 		value: 'getMany',
 		name: 'Get Many',
-		description: 'Get translatable resources by resource type',
+		description:
+			'Get source content plus translation layers for multiple resources of the same translatable type',
 		registryKey: 'translation.getMany',
 		fields: [
 			{
@@ -275,7 +303,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 				default: 'PRODUCT',
 				required: true,
 			},
-			LOCALE_FIELD,
+			TARGET_LOCALE_FIELD,
 			MARKET_ID_FIELD,
 			{
 				displayName: 'Get All',
@@ -319,6 +347,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						name: 'filterByOutdated',
 						type: 'boolean',
 						default: false,
+						description: 'Whether to request only outdated translations from Shopify',
 					},
 					{
 						displayName: 'Include Metafield Metadata',
@@ -333,6 +362,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						name: 'includeMetafields',
 						type: 'boolean',
 						default: false,
+						description: 'Whether to include nested metafields under each resource',
 					},
 					{
 						displayName: 'Metafield Limit',
@@ -354,6 +384,7 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						name: 'outdated',
 						type: 'boolean',
 						default: true,
+						description: 'Whether to return outdated translations when filtering by outdated',
 						displayOptions: {
 							show: {
 								filterByOutdated: [true],
@@ -366,7 +397,63 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 						name: 'reverse',
 						type: 'boolean',
 						default: false,
+						description: 'Whether to reverse the Shopify connection order',
 					},
+				],
+			},
+		],
+	},
+	{
+		resource: 'translation',
+		value: 'coverage',
+		name: 'Coverage',
+		description: 'Inspect which non-primary locales have translations for one resource',
+		registryKey: 'translation.coverage',
+		fields: [
+			gidField(
+				'resourceId',
+				'Resource ID',
+				'Global Shopify ID of the exact translatable resource (for metafields use gid://shopify/Metafield/{id})',
+			),
+			MARKET_ID_FIELD,
+			{
+				displayName: 'Options',
+				name: 'translationOptions',
+				type: 'collection',
+				placeholder: 'Add option',
+				default: {},
+				options: [
+					{
+						displayName: 'Include Metafield Metadata',
+						name: 'includeMetafieldMetadata',
+						type: 'boolean',
+						default: false,
+						description:
+							'Whether to enrich METAFIELD resources with namespace, key, definition name, and owner',
+					},
+					{
+						displayName: 'Include Metafields',
+						name: 'includeMetafields',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to include nested metafields under the resource',
+					},
+					{
+						displayName: 'Metafield Limit',
+						name: 'metafieldLimit',
+						type: 'number',
+						default: 50,
+						typeOptions: {
+							minValue: 1,
+							maxValue: 250,
+						},
+						displayOptions: {
+							show: {
+								includeMetafields: [true],
+							},
+						},
+					},
+					TRANSLATION_COVERAGE_OUTPUT_SHAPE_FIELD,
 				],
 			},
 		],
@@ -375,14 +462,24 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		resource: 'translation',
 		value: 'register',
 		name: 'Register',
-		description: 'Create or update translations for a resource',
+		description: 'Create or update translations for one locale and one translation scope',
 		registryKey: 'translation.register',
 		fields: [
 			gidField(
 				'resourceId',
 				'Resource ID',
-				'Global Shopify ID of the translatable resource (for metafields use gid://shopify/Metafield/{id})',
+				'Global Shopify ID of the exact translatable resource (for metafields use gid://shopify/Metafield/{id})',
 			),
+			TARGET_LOCALE_FIELD,
+			TRANSLATION_SCOPE_FIELD,
+			{
+				...MARKET_ID_FIELD,
+				displayOptions: {
+					show: {
+						translationScope: ['marketSpecific'],
+					},
+				},
+			},
 			REGISTER_TRANSLATIONS_FIELD,
 		],
 	},
@@ -390,38 +487,25 @@ export const TRANSLATION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		resource: 'translation',
 		value: 'remove',
 		name: 'Remove',
-		description: 'Delete translations by keys/locales',
+		description: 'Delete translations for one locale and one translation scope',
 		registryKey: 'translation.remove',
 		fields: [
 			gidField(
 				'resourceId',
 				'Resource ID',
-				'Global Shopify ID of the translatable resource (for metafields use gid://shopify/Metafield/{id})',
+				'Global Shopify ID of the exact translatable resource (for metafields use gid://shopify/Metafield/{id})',
 			),
+			TARGET_LOCALE_FIELD,
+			TRANSLATION_SCOPE_FIELD,
 			{
-				displayName: 'Locale Names or IDs',
-				name: 'locales',
-				type: 'multiOptions',
-				description:
-					'Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
-				typeOptions: {
-					loadOptionsMethod: 'getShopLocaleOptions',
+				...MARKET_ID_FIELD,
+				displayOptions: {
+					show: {
+						translationScope: ['marketSpecific'],
+					},
 				},
-				default: [],
-				required: true,
 			},
 			REMOVE_TRANSLATION_KEYS_FIELD,
-			{
-				displayName: 'Market Names or IDs',
-				name: 'marketIds',
-				type: 'multiOptions',
-				description:
-					'Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
-				typeOptions: {
-					loadOptionsMethod: 'getMarketOptions',
-				},
-				default: [],
-			},
 		],
 	},
 ];

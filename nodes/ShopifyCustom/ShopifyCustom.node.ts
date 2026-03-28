@@ -38,8 +38,9 @@ import { buildMetafieldsDeletePayload, buildMetafieldsSetPayload } from './share
 import { mapOutputItems, type ShopifyOutputMode } from './shared/output/outputMapper';
 import {
 	getMarketOptions,
-	getMarkets,
 	getShopLocaleOptions,
+	getShopLocales,
+	getTranslationTargetLocaleOptions,
 } from './shared/translations/options';
 
 function isObject(value: unknown): value is IDataObject {
@@ -749,7 +750,10 @@ async function maybeEnrichTranslationMetafieldMetadata(
 	mainResult: { simplified: unknown; raw: IDataObject },
 	itemIndex: number,
 ): Promise<{ simplified: unknown; raw: IDataObject }> {
-	if (resource !== 'translation' || (operation !== 'get' && operation !== 'getMany')) {
+	if (
+		resource !== 'translation' ||
+		(operation !== 'coverage' && operation !== 'get' && operation !== 'getMany')
+	) {
 		return mainResult;
 	}
 
@@ -809,48 +813,75 @@ function getTranslationOutputShape(operationParameters: IDataObject): Translatio
 }
 
 function getRequestedTranslationMarketId(operationParameters: IDataObject): string | undefined {
-	const translationOptions = getTranslationOptionsFromParameters(operationParameters);
-	return toOptionalString(operationParameters.marketId) ?? toOptionalString(translationOptions?.marketId);
+	return toOptionalString(operationParameters.marketId);
 }
 
-async function maybeResolveTranslationMarketSelection(
+function getTranslationScope(operationParameters: IDataObject): 'global' | 'marketSpecific' {
+	return toOptionalString(operationParameters.translationScope) === 'marketSpecific'
+		? 'marketSpecific'
+		: 'global';
+}
+
+async function validateTranslationParameters(
 	executeFunctions: IExecuteFunctions,
 	resource: ShopifyResourceValue,
 	operation: string,
 	operationParameters: IDataObject,
 	itemIndex: number,
 ): Promise<IDataObject> {
-	if (resource !== 'translation' || (operation !== 'get' && operation !== 'getMany')) {
+	if (
+		resource !== 'translation' ||
+		(operation !== 'coverage' &&
+			operation !== 'get' &&
+			operation !== 'getMany' &&
+			operation !== 'register' &&
+			operation !== 'remove')
+	) {
 		return operationParameters;
 	}
 
-	const explicitMarketId = getRequestedTranslationMarketId(operationParameters);
-	if (explicitMarketId) {
-		return {
-			...operationParameters,
-			marketId: explicitMarketId,
-		};
+	const locales = await getShopLocales(executeFunctions);
+	const primaryLocale = locales.find((locale) => locale.primary);
+	const targetLocale = toOptionalString(operationParameters.locale);
+
+	if (operation !== 'coverage') {
+		if (!targetLocale) {
+			throw new NodeOperationError(executeFunctions.getNode(), 'Target Locale is required', {
+				itemIndex,
+			});
+		}
+
+		if (locales.length > 0 && !locales.some((locale) => locale.locale === targetLocale)) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				`Locale "${targetLocale}" is not enabled in shopLocales`,
+				{ itemIndex },
+			);
+		}
+
+		if (primaryLocale?.locale && targetLocale === primaryLocale.locale) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				`Primary shop locale "${primaryLocale.locale}" isn't supported in the Translations resource. Source content is returned automatically; use a non-primary locale as the translation target.`,
+				{ itemIndex },
+			);
+		}
 	}
 
-	const markets = await getMarkets(executeFunctions);
-	if (markets.length === 0) {
-		return operationParameters;
+	const translationScope = getTranslationScope(operationParameters);
+	const marketId = getRequestedTranslationMarketId(operationParameters);
+	if ((operation === 'register' || operation === 'remove') && translationScope === 'marketSpecific' && !marketId) {
+		throw new NodeOperationError(
+			executeFunctions.getNode(),
+			'Market is required when Translation Scope is set to Market-specific',
+			{ itemIndex },
+		);
 	}
 
-	const activeMarkets = markets.filter((market) => market.status === 'ACTIVE');
-	const candidateMarkets = activeMarkets.length > 0 ? activeMarkets : markets;
-	if (candidateMarkets.length === 1) {
-		return {
-			...operationParameters,
-			marketId: candidateMarkets[0].id,
-		};
-	}
-
-	throw new NodeOperationError(
-		executeFunctions.getNode(),
-		'Market is required for Translation Get/Get Many when the shop has multiple markets',
-		{ itemIndex },
-	);
+	return {
+		...operationParameters,
+		translationScope,
+	};
 }
 
 function getTranslationsByKey(
@@ -902,34 +933,6 @@ function pickRepresentativeTranslation(translations: IDataObject[]): IDataObject
 		(translation) => isObject(translation.market),
 	);
 	return marketSpecificTranslation ?? translations[0];
-}
-
-function buildEffectiveTranslations(
-	globalTranslations: IDataObject[],
-	marketTranslations: IDataObject[],
-	useMarketContext: boolean,
-): IDataObject[] {
-	if (!useMarketContext) {
-		return globalTranslations.map((translation) => ({ ...translation }));
-	}
-
-	const globalTranslationsByKey = getTranslationsByKey(globalTranslations);
-	const marketTranslationsByKey = getTranslationsByKey(marketTranslations);
-	const keys = new Set<string>([
-		...globalTranslationsByKey.keys(),
-		...marketTranslationsByKey.keys(),
-	]);
-	const effectiveTranslations: IDataObject[] = [];
-
-	for (const key of keys) {
-		const marketTranslationsForKey = marketTranslationsByKey.get(key) ?? [];
-		const globalTranslationsForKey = globalTranslationsByKey.get(key) ?? [];
-		const preferredTranslations =
-			marketTranslationsForKey.length > 0 ? marketTranslationsForKey : globalTranslationsForKey;
-		effectiveTranslations.push(...preferredTranslations.map((translation) => ({ ...translation })));
-	}
-
-	return effectiveTranslations;
 }
 
 function getNestedMetafieldResources(resourceNode: IDataObject): IDataObject[] {
@@ -997,14 +1000,8 @@ function buildTranslationFieldsForResource(
 	const marketTranslations = Array.isArray(resourceNode.marketTranslations)
 		? resourceNode.marketTranslations.filter(isObject)
 		: [];
-	const effectiveTranslations = buildEffectiveTranslations(
-		globalTranslations,
-		marketTranslations,
-		!!targetMarketId,
-	);
 	const globalTranslationsByKey = getTranslationsByKey(globalTranslations);
 	const marketTranslationsByKey = getTranslationsByKey(marketTranslations);
-	const effectiveTranslationsByKey = getTranslationsByKey(effectiveTranslations);
 	const fields: IDataObject[] = [];
 
 	for (const contentItem of translatableContentItems) {
@@ -1015,31 +1012,20 @@ function buildTranslationFieldsForResource(
 
 		const globalTranslationsForKey = globalTranslationsByKey.get(key) ?? [];
 		const marketTranslationsForKey = marketTranslationsByKey.get(key) ?? [];
-		const keyTranslations = effectiveTranslationsByKey.get(key) ?? [];
-		const representative = pickRepresentativeTranslation(keyTranslations);
+		const globalRepresentative = pickRepresentativeTranslation(globalTranslationsForKey);
+		const marketRepresentative = pickRepresentativeTranslation(marketTranslationsForKey);
+		const effectiveRepresentative = marketRepresentative ?? globalRepresentative;
 		const sourceLocale =
 			typeof contentItem.locale === 'string' ? contentItem.locale : undefined;
 		const marketContentItem = marketTranslatableContentByKey.get(key);
-		const usesSourceLocaleAsTarget =
-			keyTranslations.length === 0 &&
-			typeof targetLocale === 'string' &&
-			targetLocale.length > 0 &&
-			!!sourceLocale &&
-			sourceLocale === targetLocale;
-		const translationStatus =
-			keyTranslations.length > 0
-				? 'translated'
-				: usesSourceLocaleAsTarget
-					? 'source'
-					: 'missing';
-		const translationSource =
-			keyTranslations.length > 0
-				? marketTranslationsForKey.length > 0
-					? 'market'
-					: 'global'
-				: usesSourceLocaleAsTarget
-					? 'source'
-					: 'missing';
+		const hasGlobalTranslation = globalTranslationsForKey.length > 0;
+		const hasMarketTranslation = marketTranslationsForKey.length > 0;
+		const hasAnyTranslation = !!effectiveRepresentative;
+		const effectiveSource = hasMarketTranslation
+			? 'market'
+			: hasGlobalTranslation
+				? 'global'
+				: 'source';
 
 		const field: IDataObject = {
 			key,
@@ -1049,9 +1035,15 @@ function buildTranslationFieldsForResource(
 			translatableContentDigest: contentItem.digest,
 			targetLocale,
 			targetMarketId: targetMarketId ?? null,
-			translationStatus,
-			translationSource,
-			translationCount: keyTranslations.length,
+			translationStatus: hasAnyTranslation ? 'translated' : 'missing',
+			hasAnyTranslation,
+			hasGlobalTranslation,
+			hasMarketTranslation,
+			effectiveSource,
+			effectiveValue: hasAnyTranslation ? effectiveRepresentative.value : contentItem.value,
+			effectiveLocale: hasAnyTranslation ? targetLocale : sourceLocale ?? null,
+			effectiveOutdated: hasAnyTranslation ? Boolean(effectiveRepresentative.outdated) : false,
+			effectiveUpdatedAt: hasAnyTranslation ? effectiveRepresentative.updatedAt : null,
 			globalTranslationCount: globalTranslationsForKey.length,
 			marketTranslationCount: marketTranslationsForKey.length,
 		};
@@ -1062,28 +1054,19 @@ function buildTranslationFieldsForResource(
 			field.marketTranslatableContentDigest = marketContentItem.digest;
 		}
 
-		if (representative) {
-			field.translatedValue = representative.value;
-			field.translatedUpdatedAt = representative.updatedAt;
-			field.translatedOutdated = representative.outdated;
-			if (isObject(representative.market)) {
-				field.translatedMarketId = representative.market.id;
-				field.translatedMarketName = representative.market.name;
+		if (globalRepresentative) {
+			field.globalTranslationValue = globalRepresentative.value;
+			field.globalTranslationUpdatedAt = globalRepresentative.updatedAt;
+			field.globalTranslationOutdated = Boolean(globalRepresentative.outdated);
+		}
+		if (marketRepresentative) {
+			field.marketTranslationValue = marketRepresentative.value;
+			field.marketTranslationUpdatedAt = marketRepresentative.updatedAt;
+			field.marketTranslationOutdated = Boolean(marketRepresentative.outdated);
+			if (isObject(marketRepresentative.market)) {
+				field.marketTranslationMarketId = marketRepresentative.market.id;
+				field.marketTranslationMarketName = marketRepresentative.market.name;
 			}
-		}
-		if (!representative && usesSourceLocaleAsTarget) {
-			field.translatedValue = contentItem.value;
-			field.translatedOutdated = false;
-		}
-
-		if (globalTranslationsForKey.length > 0) {
-			field.globalTranslations = globalTranslationsForKey;
-		}
-		if (marketTranslationsForKey.length > 0) {
-			field.marketTranslations = marketTranslationsForKey;
-		}
-		if (keyTranslations.length > 0) {
-			field.translations = keyTranslations;
 		}
 
 		fields.push(field);
@@ -1109,11 +1092,12 @@ function buildTranslationResourceTree(
 		resourceType: getResourceTypeFromGid(resourceId) ?? null,
 		parentResourceId: parentResourceId ?? null,
 		resourceLevel: parentResourceId ? 'nested' : 'root',
-		requestedLocale: targetLocale || null,
-		requestedMarketId: targetMarketId ?? null,
+		sourceLocale:
+			fields.find((field) => typeof field.sourceLocale === 'string')?.sourceLocale ?? null,
+		targetLocale: targetLocale || null,
+		targetMarketId: targetMarketId ?? null,
 		fieldCount: fields.length,
-		translatedFieldCount: fields.filter((field) => field.translationStatus === 'translated').length,
-		sourceFieldCount: fields.filter((field) => field.translationStatus === 'source').length,
+		translatedFieldCount: fields.filter((field) => Boolean(field.hasAnyTranslation)).length,
 		missingFieldCount: fields.filter((field) => field.translationStatus === 'missing').length,
 		fields,
 	};
@@ -1132,8 +1116,9 @@ function flattenTranslationResourceTree(resourceTree: IDataObject, rows: IDataOb
 	const resourceId = toOptionalString(resourceTree.resourceId);
 	const parentResourceId = toOptionalString(resourceTree.parentResourceId);
 	const resourceType = toOptionalString(resourceTree.resourceType);
-	const requestedLocale = toOptionalString(resourceTree.requestedLocale);
-	const requestedMarketId = toOptionalString(resourceTree.requestedMarketId);
+	const sourceLocale = toOptionalString(resourceTree.sourceLocale);
+	const targetLocale = toOptionalString(resourceTree.targetLocale);
+	const targetMarketId = toOptionalString(resourceTree.targetMarketId);
 	const fields = Array.isArray(resourceTree.fields) ? resourceTree.fields.filter(isObject) : [];
 
 	for (const field of fields) {
@@ -1142,8 +1127,9 @@ function flattenTranslationResourceTree(resourceTree: IDataObject, rows: IDataOb
 			resourceType: resourceType ?? null,
 			parentResourceId: parentResourceId ?? null,
 			resourceLevel: resourceTree.resourceLevel,
-			requestedLocale: requestedLocale ?? null,
-			requestedMarketId: requestedMarketId ?? null,
+			sourceLocale: sourceLocale ?? null,
+			targetLocale: targetLocale ?? null,
+			targetMarketId: targetMarketId ?? null,
 			...field,
 		};
 		appendMetafieldMetadataToRow(row, resourceTree);
@@ -1156,6 +1142,279 @@ function flattenTranslationResourceTree(resourceTree: IDataObject, rows: IDataOb
 	for (const metafieldResource of metafields) {
 		flattenTranslationResourceTree(metafieldResource, rows);
 	}
+}
+
+function getTranslationCoverageRowKey(row: IDataObject): string | undefined {
+	const resourceId = toOptionalString(row.resourceId);
+	const parentResourceId = toOptionalString(row.parentResourceId) ?? '';
+	const key = toOptionalString(row.key);
+	if (!resourceId || !key) {
+		return undefined;
+	}
+
+	return `${resourceId}::${parentResourceId}::${key}`;
+}
+
+function sortLocaleSet(locales: Set<string>): string[] {
+	return Array.from(locales).sort((a, b) => a.localeCompare(b));
+}
+
+function buildTranslationCoverageRows(
+	localeRows: IDataObject[],
+	targetLocales: string[],
+	primaryLocale: string | undefined,
+	targetMarketId: string | undefined,
+): IDataObject[] {
+	const coverageMap = new Map<
+		string,
+		{
+			row: IDataObject;
+			globalTranslatedLocales: Set<string>;
+			marketTranslatedLocales: Set<string>;
+			missingLocales: Set<string>;
+			translatedLocales: Set<string>;
+		}
+	>();
+
+	for (const localeRow of localeRows) {
+		const rowKey = getTranslationCoverageRowKey(localeRow);
+		if (!rowKey) {
+			continue;
+		}
+
+		const targetLocale = toOptionalString(localeRow.targetLocale);
+		if (!targetLocale) {
+			continue;
+		}
+
+		let entry = coverageMap.get(rowKey);
+		if (!entry) {
+			const baseRow: IDataObject = {
+				resourceId: toOptionalString(localeRow.resourceId) ?? null,
+				resourceType: toOptionalString(localeRow.resourceType) ?? null,
+				parentResourceId: toOptionalString(localeRow.parentResourceId) ?? null,
+				resourceLevel: localeRow.resourceLevel,
+				key: localeRow.key,
+				sourceValue: localeRow.sourceValue,
+				sourceLocale: toOptionalString(localeRow.sourceLocale) ?? primaryLocale ?? null,
+				sourceType: localeRow.sourceType,
+				translatableContentDigest: localeRow.translatableContentDigest,
+				targetMarketId: targetMarketId ?? null,
+			};
+
+			if ('marketSourceValue' in localeRow) {
+				baseRow.marketSourceValue = localeRow.marketSourceValue;
+			}
+			if ('marketSourceLocale' in localeRow) {
+				baseRow.marketSourceLocale = localeRow.marketSourceLocale;
+			}
+			if ('marketTranslatableContentDigest' in localeRow) {
+				baseRow.marketTranslatableContentDigest = localeRow.marketTranslatableContentDigest;
+			}
+
+			entry = {
+				row: baseRow,
+				globalTranslatedLocales: new Set<string>(),
+				marketTranslatedLocales: new Set<string>(),
+				missingLocales: new Set<string>(),
+				translatedLocales: new Set<string>(),
+			};
+			coverageMap.set(rowKey, entry);
+		}
+
+		if (localeRow.hasGlobalTranslation) {
+			entry.globalTranslatedLocales.add(targetLocale);
+		}
+		if (localeRow.hasMarketTranslation) {
+			entry.marketTranslatedLocales.add(targetLocale);
+		}
+		if (localeRow.translationStatus === 'translated') {
+			entry.translatedLocales.add(targetLocale);
+		} else {
+			entry.missingLocales.add(targetLocale);
+		}
+	}
+
+	const coverageRows: IDataObject[] = [];
+
+	for (const entry of coverageMap.values()) {
+		for (const locale of targetLocales) {
+			if (!entry.translatedLocales.has(locale)) {
+				entry.missingLocales.add(locale);
+			}
+		}
+
+		const translatedLocales = sortLocaleSet(entry.translatedLocales);
+		const globalTranslatedLocales = sortLocaleSet(entry.globalTranslatedLocales);
+		const marketTranslatedLocales = sortLocaleSet(entry.marketTranslatedLocales);
+		const missingLocales = sortLocaleSet(entry.missingLocales);
+		const translatedLocaleCount = translatedLocales.length;
+		const missingLocaleCount = missingLocales.length;
+
+		coverageRows.push({
+			...entry.row,
+			targetLocales,
+			targetLocaleCount: targetLocales.length,
+			translatedLocales,
+			translatedLocaleCount,
+			globalTranslatedLocales,
+			globalTranslatedLocaleCount: globalTranslatedLocales.length,
+			marketTranslatedLocales,
+			marketTranslatedLocaleCount: marketTranslatedLocales.length,
+			missingLocales,
+			missingLocaleCount,
+			hasAnyTranslation: translatedLocaleCount > 0,
+			partiallyTranslated: translatedLocaleCount > 0 && missingLocaleCount > 0,
+			fullyTranslated: targetLocales.length > 0 && missingLocaleCount === 0,
+		});
+	}
+
+	return coverageRows;
+}
+
+function buildTranslationCoverageResourceTrees(
+	coverageRows: IDataObject[],
+	targetLocales: string[],
+	primaryLocale: string | undefined,
+	targetMarketId: string | undefined,
+): IDataObject[] {
+	const resourcesById = new Map<string, IDataObject>();
+	const roots: IDataObject[] = [];
+
+	for (const row of coverageRows) {
+		const resourceId = toOptionalString(row.resourceId);
+		if (!resourceId) {
+			continue;
+		}
+
+		let resourceTree = resourcesById.get(resourceId);
+		if (!resourceTree) {
+			resourceTree = {
+				resourceId,
+				resourceType: toOptionalString(row.resourceType) ?? null,
+				parentResourceId: toOptionalString(row.parentResourceId) ?? null,
+				resourceLevel: row.resourceLevel,
+				sourceLocale: toOptionalString(row.sourceLocale) ?? primaryLocale ?? null,
+				targetLocales,
+				targetLocaleCount: targetLocales.length,
+				targetMarketId: targetMarketId ?? null,
+				fields: [],
+			};
+			resourcesById.set(resourceId, resourceTree);
+		}
+
+		(resourceTree.fields as IDataObject[]).push({ ...row });
+	}
+
+	for (const resourceTree of resourcesById.values()) {
+		const fields = Array.isArray(resourceTree.fields) ? resourceTree.fields.filter(isObject) : [];
+		resourceTree.fieldCount = fields.length;
+		resourceTree.fullyTranslatedFieldCount = fields.filter((field) => Boolean(field.fullyTranslated)).length;
+		resourceTree.partiallyTranslatedFieldCount = fields.filter((field) =>
+			Boolean(field.partiallyTranslated),
+		).length;
+		resourceTree.missingFieldCount = fields.filter(
+			(field) => Number(field.translatedLocaleCount ?? 0) === 0,
+		).length;
+
+		const parentResourceId = toOptionalString(resourceTree.parentResourceId);
+		if (parentResourceId && resourcesById.has(parentResourceId)) {
+			const parent = resourcesById.get(parentResourceId)!;
+			if (!Array.isArray(parent.metafields)) {
+				parent.metafields = [];
+			}
+			(parent.metafields as IDataObject[]).push(resourceTree);
+			continue;
+		}
+
+		roots.push(resourceTree);
+	}
+
+	return roots;
+}
+
+async function runTranslationCoverageOperation(
+	executeFunctions: IExecuteFunctions,
+	operationParameters: IDataObject,
+	itemIndex: number,
+): Promise<{ simplified: unknown; raw: IDataObject }> {
+	const locales = await getShopLocales(executeFunctions);
+	const primaryLocale = locales.find((locale) => locale.primary);
+	const targetLocales = locales
+		.filter((locale) => !locale.primary)
+		.map((locale) => locale.locale)
+		.sort((a, b) => a.localeCompare(b));
+
+	if (targetLocales.length === 0) {
+		throw new NodeOperationError(
+			executeFunctions.getNode(),
+			'Translations Coverage requires at least one enabled non-primary locale',
+			{ itemIndex },
+		);
+	}
+
+	const targetMarketId = getRequestedTranslationMarketId(operationParameters);
+	const rawByLocale: IDataObject = {};
+	const localeRows: IDataObject[] = [];
+
+	for (const targetLocale of targetLocales) {
+		const localeResult = await runRegistryOperation(
+			executeFunctions,
+			'translation.coverage',
+			{
+				...operationParameters,
+				locale: targetLocale,
+			},
+			itemIndex,
+		);
+		rawByLocale[targetLocale] = localeResult.raw;
+
+		const resourceTrees = toArrayOfObjects(localeResult.simplified).map((resourceNode) =>
+			buildTranslationResourceTree(resourceNode, targetLocale, targetMarketId),
+		);
+		for (const resourceTree of resourceTrees) {
+			flattenTranslationResourceTree(resourceTree, localeRows);
+		}
+	}
+
+	const coverageRows = buildTranslationCoverageRows(
+		localeRows,
+		targetLocales,
+		primaryLocale?.locale,
+		targetMarketId,
+	);
+	const outputShape = getTranslationOutputShape(operationParameters);
+	const simplified =
+		outputShape === 'resources'
+			? buildTranslationCoverageResourceTrees(
+					coverageRows,
+					targetLocales,
+					primaryLocale?.locale,
+					targetMarketId,
+				)
+			: outputShape === 'flattenedMissing'
+				? coverageRows.filter((row) => Number(row.missingLocaleCount ?? 0) > 0)
+				: coverageRows;
+
+	return {
+		simplified,
+		raw: {
+			byLocale: rawByLocale,
+			translationCoverageOutputShape: outputShape,
+			translationCoveragePrimaryLocale: primaryLocale?.locale ?? null,
+			translationCoverageResourceCount:
+				outputShape === 'resources'
+					? toArrayOfObjects(simplified).length
+					: new Set(
+							coverageRows
+								.map((row) => toOptionalString(row.resourceId))
+								.filter((resourceId): resourceId is string => !!resourceId),
+						).size,
+			translationCoverageRowCount: coverageRows.length,
+			translationCoverageTargetLocales: targetLocales,
+			translationCoverageTargetMarketId: targetMarketId ?? null,
+		},
+	};
 }
 
 function maybeShapeTranslationOutput(
@@ -1182,7 +1441,7 @@ function maybeShapeTranslationOutput(
 				...mainResult.raw,
 				translationOutputShape: outputShape,
 				translationResourceCount: resourceTrees.length,
-				translationMarketId: targetMarketId ?? null,
+				translationTargetMarketId: targetMarketId ?? null,
 			},
 		};
 	}
@@ -1203,7 +1462,7 @@ function maybeShapeTranslationOutput(
 			translationOutputShape: outputShape,
 			translationOutputRows: shapedRows.length,
 			translationResourceCount: resourceTrees.length,
-			translationMarketId: targetMarketId ?? null,
+			translationTargetMarketId: targetMarketId ?? null,
 		},
 	};
 }
@@ -1308,6 +1567,15 @@ export class ShopifyCustom implements INodeType {
 			async getShopLocaleOptions(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				try {
 					return await getShopLocaleOptions(this);
+				} catch {
+					return [];
+				}
+			},
+			async getTranslationTargetLocaleOptions(
+				this: ILoadOptionsFunctions,
+			): Promise<INodePropertyOptions[]> {
+				try {
+					return await getTranslationTargetLocaleOptions(this);
 				} catch {
 					return [];
 				}
@@ -1423,7 +1691,7 @@ export class ShopifyCustom implements INodeType {
 					operationParameters.afterCursor = '';
 				}
 
-				operationParameters = await maybeResolveTranslationMarketSelection(
+				operationParameters = await validateTranslationParameters(
 					this,
 					resource,
 					operation,
@@ -1432,7 +1700,9 @@ export class ShopifyCustom implements INodeType {
 				);
 
 				const mainResult =
-					resource === 'file' && operation === 'deleteUnusedImages'
+					resource === 'translation' && operation === 'coverage'
+						? await runTranslationCoverageOperation(this, operationParameters, itemIndex)
+						: resource === 'file' && operation === 'deleteUnusedImages'
 						? await runDeleteUnusedImagesOperation(this, operationParameters, itemIndex)
 						: resource === 'file' && operation === 'createUpload'
 							? await runCreateUploadFileOperation(this, operationParameters, itemIndex)

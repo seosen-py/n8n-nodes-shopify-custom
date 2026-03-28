@@ -186,6 +186,36 @@ export async function getShopLocaleOptions(
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export async function getPrimaryShopLocale(
+	context: ShopifyTranslationContext,
+): Promise<IShopLocale | undefined> {
+	const locales = await getShopLocales(context);
+	return locales.find((locale) => locale.primary) ?? locales[0];
+}
+
+export async function getTranslationTargetLocales(
+	context: ShopifyTranslationContext,
+): Promise<IShopLocale[]> {
+	const locales = await getShopLocales(context);
+	return locales.filter((locale) => !locale.primary);
+}
+
+export async function getTranslationTargetLocaleOptions(
+	context: ShopifyTranslationContext,
+): Promise<INodePropertyOptions[]> {
+	const locales = await getTranslationTargetLocales(context);
+	if (locales.length === 0) {
+		return [];
+	}
+
+	return locales
+		.map((locale) => ({
+			name: toLocaleLabel(locale),
+			value: locale.locale,
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function getMarkets(context: ShopifyTranslationContext): Promise<IMarketNode[]> {
 	const cacheKey = await getCacheKeyFromCredentials(context);
 	if (!cacheKey) {

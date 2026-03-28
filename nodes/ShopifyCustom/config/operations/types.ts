@@ -4,6 +4,7 @@ import type { ShopifyResourceValue } from '../resources';
 export type ShopifyOperationValue =
 	| 'create'
 	| 'createUpload'
+	| 'coverage'
 	| 'get'
 	| 'getMany'
 	| 'update'
@@ -68,6 +69,7 @@ export type ShopifyOperationKey =
 	| 'file.update'
 	| 'file.delete'
 	| 'file.deleteUnusedImages'
+	| 'translation.coverage'
 	| 'translation.get'
 	| 'translation.getMany'
 	| 'translation.register'
