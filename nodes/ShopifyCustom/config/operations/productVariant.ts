@@ -10,6 +10,46 @@ const PRODUCT_VARIANT_SORT_OPTIONS = [
 	{ name: 'Inventory Quantity', value: 'INVENTORY_QUANTITY' },
 ];
 
+function productVariantAdditionalFields(): INodeProperties[] {
+	return [
+		{
+			displayName: 'Additional Fields',
+			name: 'additionalFields',
+			type: 'multiOptions',
+			default: [],
+			description: 'Additional Product Variant fields to include in the response',
+			options: [
+				{
+					name: 'Available For Sale',
+					value: 'availableForSale',
+				},
+				{
+					name: 'Image (Deprecated)',
+					value: 'image',
+					description: 'Legacy variant image field. Prefer Media for new workflows.',
+				},
+				{
+					name: 'Inventory Item',
+					value: 'inventoryItem',
+				},
+				{
+					name: 'Inventory Quantity',
+					value: 'inventoryQuantity',
+				},
+				{
+					name: 'Media',
+					value: 'media',
+					description: 'Variant media connection. Preferred over the deprecated image field.',
+				},
+				{
+					name: 'Product Handle',
+					value: 'productHandle',
+				},
+			],
+		},
+	];
+}
+
 function productVariantBaseFields(): INodeProperties[] {
 	return [
 		{
@@ -73,7 +113,11 @@ export const PRODUCT_VARIANT_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get',
 		description: 'Get a product variant by ID',
 		registryKey: 'productVariant.get',
-		fields: [gidField('variantId', 'Variant ID', 'Global variant ID in Shopify'), ...readMetafieldsFields()],
+		fields: [
+			gidField('variantId', 'Variant ID', 'Global variant ID in Shopify'),
+			...readMetafieldsFields(),
+			...productVariantAdditionalFields(),
+		],
 	},
 	{
 		resource: 'productVariant',
@@ -81,7 +125,10 @@ export const PRODUCT_VARIANT_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many variants',
 		registryKey: 'productVariant.getMany',
-		fields: paginationFields(PRODUCT_VARIANT_SORT_OPTIONS),
+		fields: [
+			...paginationFields(PRODUCT_VARIANT_SORT_OPTIONS),
+			...productVariantAdditionalFields(),
+		],
 	},
 	{
 		resource: 'productVariant',

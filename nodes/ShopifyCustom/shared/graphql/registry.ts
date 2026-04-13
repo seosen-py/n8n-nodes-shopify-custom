@@ -140,6 +140,29 @@ function asNumber(value: unknown): number | undefined {
 	return Number.isNaN(parsed) ? undefined : parsed;
 }
 
+function asStringArray(value: unknown): string[] {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+
+	return value
+		.map((item) => asString(item))
+		.filter((item): item is string => !!item);
+}
+
+function getProductVariantReadVariables(parameters: IDataObject): IDataObject {
+	const additionalFields = new Set(asStringArray(parameters.additionalFields));
+
+	return {
+		includeAvailableForSale: additionalFields.has('availableForSale'),
+		includeImage: additionalFields.has('image'),
+		includeInventoryItem: additionalFields.has('inventoryItem'),
+		includeInventoryQuantity: additionalFields.has('inventoryQuantity'),
+		includeMedia: additionalFields.has('media'),
+		includeProductHandle: additionalFields.has('productHandle'),
+	};
+}
+
 function parseTags(value: unknown): string[] | undefined {
 	const raw = asString(value);
 	if (!raw) {
@@ -1254,6 +1277,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		buildVariables: (parameters) => ({
 			id: asString(parameters.variantId),
 			...getMetafieldReadVariables(parameters),
+			...getProductVariantReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['productVariant']),
 	},
@@ -1262,6 +1286,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		buildVariables: (parameters) => ({
 			...getConnectionVariables(parameters),
 			...getMetafieldReadVariables(parameters),
+			...getProductVariantReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['productVariants']),
 		pagination: {

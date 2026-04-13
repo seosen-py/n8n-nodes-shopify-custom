@@ -23,6 +23,12 @@ query ProductVariantGet(
 	$metafieldKeys: [String!]
 	$resolveMetafieldReferences: Boolean!
 	$metafieldReferencesFirst: Int!
+	$includeAvailableForSale: Boolean!
+	$includeInventoryItem: Boolean!
+	$includeInventoryQuantity: Boolean!
+	$includeProductHandle: Boolean!
+	$includeImage: Boolean!
+	$includeMedia: Boolean!
 ) {
 	productVariant(id: $id) {
 		id
@@ -33,6 +39,36 @@ query ProductVariantGet(
 		compareAtPrice
 		taxable
 		updatedAt
+		availableForSale @include(if: $includeAvailableForSale)
+		inventoryItem @include(if: $includeInventoryItem) {
+			id
+			sku
+			tracked
+			requiresShipping
+		}
+		inventoryQuantity @include(if: $includeInventoryQuantity)
+		product @include(if: $includeProductHandle) {
+			id
+			title
+			handle
+		}
+		image @include(if: $includeImage) {
+			altText
+			url
+		}
+		media(first: 10) @include(if: $includeMedia) {
+			nodes {
+				__typename
+				... on MediaImage {
+					id
+					image {
+						url
+						width
+						height
+					}
+				}
+			}
+		}
 		${OPTIONAL_METAFIELDS_CONNECTION}
 	}
 }
@@ -50,6 +86,12 @@ query ProductVariantGetMany(
 	$metafieldKeys: [String!]
 	$resolveMetafieldReferences: Boolean!
 	$metafieldReferencesFirst: Int!
+	$includeAvailableForSale: Boolean!
+	$includeInventoryItem: Boolean!
+	$includeInventoryQuantity: Boolean!
+	$includeProductHandle: Boolean!
+	$includeImage: Boolean!
+	$includeMedia: Boolean!
 ) {
 	productVariants(first: $first, after: $after, query: $query, sortKey: $sortKey, reverse: $reverse) {
 		nodes {
@@ -58,9 +100,35 @@ query ProductVariantGetMany(
 			sku
 			price
 			updatedAt
+			availableForSale @include(if: $includeAvailableForSale)
+			inventoryItem @include(if: $includeInventoryItem) {
+				id
+				sku
+				tracked
+				requiresShipping
+			}
+			inventoryQuantity @include(if: $includeInventoryQuantity)
 			product {
 				id
 				title
+				handle @include(if: $includeProductHandle)
+			}
+			image @include(if: $includeImage) {
+				altText
+				url
+			}
+			media(first: 10) @include(if: $includeMedia) {
+				nodes {
+					__typename
+					... on MediaImage {
+						id
+						image {
+							url
+							width
+							height
+						}
+					}
+				}
 			}
 			${OPTIONAL_METAFIELDS_CONNECTION}
 		}
