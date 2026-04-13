@@ -3,6 +3,7 @@ import type {
 	IDataObject,
 	IHookFunctions,
 	INodeExecutionData,
+	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 	ITriggerFunctions,
@@ -118,6 +119,13 @@ const ORDER_TOPIC_TO_EVENT = new Map<string, string>(
 	ORDER_EVENT_OPTIONS.map((option) => [option.value, option.name]),
 );
 
+const ORDER_EVENT_NODE_OPTIONS: INodePropertyOptions[] = ORDER_EVENT_OPTIONS.map((option) => ({
+	name: option.name,
+	value: option.value,
+	description: option.description,
+	action: `${option.name} order`,
+}));
+
 function isObject(value: unknown): value is IDataObject {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -177,9 +185,12 @@ function getHeaderValue(headers: IDataObject, headerName: string): string | unde
 }
 
 function getSelectedTopics(context: IHookFunctions | ITriggerFunctions | IWebhookFunctions): string[] {
+	const primaryEvent = toOptionalString(context.getNodeParameter('event', ''));
+	const additionalEvents = toStringArray(context.getNodeParameter('additionalEvents', []));
+
 	return Array.from(
 		new Set(
-			toStringArray(context.getNodeParameter('events', [])),
+			[primaryEvent, ...additionalEvents].filter((topic): topic is string => !!topic),
 		),
 	).sort((a, b) => a.localeCompare(b));
 }
@@ -390,7 +401,8 @@ export class ShopifyCustomTrigger implements INodeType {
 		icon: { light: 'file:shopify.svg', dark: 'file:shopify.dark.svg' },
 		group: ['trigger'],
 		version: 1,
-		subtitle: '={{$parameter["resource"] + ": " + ($parameter["events"] || []).join(", ")}}',
+		subtitle:
+			'={{$parameter["resource"] + ": " + $parameter["event"] + (($parameter["additionalEvents"] || []).length ? " +" + ($parameter["additionalEvents"] || []).length : "")}}',
 		description: 'Receive Shopify webhook events through webhook subscriptions',
 		defaults: {
 			name: 'Shopify Custom Trigger',
@@ -420,23 +432,33 @@ export class ShopifyCustomTrigger implements INodeType {
 				],
 			},
 			{
-				displayName: 'Events',
-				name: 'events',
-				type: 'multiOptions',
+				displayName: 'Event',
+				name: 'event',
+				type: 'options',
 				noDataExpression: true,
-				default: ['ORDERS_CREATE'],
+				default: 'ORDERS_CREATE',
 				required: true,
 				displayOptions: {
 					show: {
 						resource: ['order'],
 					},
 				},
-				options: ORDER_EVENT_OPTIONS.map((option) => ({
-					name: option.name,
-					value: option.value,
-					description: option.description,
-				})),
-				description: 'Select one or more Shopify webhook topics to subscribe to',
+				options: ORDER_EVENT_NODE_OPTIONS,
+				description: 'Select the primary Shopify order event to subscribe to',
+			},
+			{
+				displayName: 'Additional Events',
+				name: 'additionalEvents',
+				type: 'multiOptions',
+				noDataExpression: true,
+				default: [],
+				displayOptions: {
+					show: {
+						resource: ['order'],
+					},
+				},
+				options: ORDER_EVENT_NODE_OPTIONS,
+				description: 'Optionally subscribe to additional Shopify order events in the same trigger',
 			},
 			{
 				displayName: 'Options',
