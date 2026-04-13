@@ -1,14 +1,22 @@
 import type {
 	IDataObject,
 	IExecuteFunctions,
+	IHookFunctions,
 	IHttpRequestOptions,
 	ILoadOptionsFunctions,
+	ITriggerFunctions,
+	IWebhookFunctions,
 } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 
 export const SHOPIFY_CUSTOM_CREDENTIAL_NAME = 'shopifyCustomAdminApi';
 
-type ShopifyFunctionContext = IExecuteFunctions | ILoadOptionsFunctions;
+type ShopifyFunctionContext =
+	| IExecuteFunctions
+	| ILoadOptionsFunctions
+	| IHookFunctions
+	| ITriggerFunctions
+	| IWebhookFunctions;
 
 interface IShopifyGraphQLError {
 	message: string;

@@ -45,6 +45,18 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 			default: '',
 			required: true,
 		},
+		{
+			displayName: 'Webhook Secret',
+			name: 'webhookSecret',
+			type: 'string',
+			typeOptions: {
+				password: true,
+			},
+			default: '',
+			required: false,
+			description:
+				'App client secret used to verify Shopify webhook signatures for trigger nodes',
+		},
 	];
 
 	authenticate: IAuthenticateGeneric = {
