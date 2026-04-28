@@ -1,6 +1,10 @@
 import type { IDataObject, IExecuteFunctions, ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
-import { assertNoGraphQLErrors, executeShopifyGraphql } from '../graphql/client';
+import {
+	assertNoGraphQLErrors,
+	executeShopifyGraphql,
+	getSelectedShopifyCredentials,
+} from '../graphql/client';
 import { METAFIELD_DEFINITION_TYPES_QUERY } from '../graphql/templates/metafields';
 
 type ShopifyFunctionContext = IExecuteFunctions | ILoadOptionsFunctions;
@@ -32,7 +36,7 @@ function getCacheKey(credentials: IDataObject): string {
 export async function getMetafieldDefinitionTypes(
 	context: ShopifyFunctionContext,
 ): Promise<IMetafieldDefinitionType[]> {
-	const credentials = (await context.getCredentials('shopifyCustomAdminApi')) as IDataObject;
+	const { credentials } = await getSelectedShopifyCredentials(context);
 	const cacheKey = getCacheKey(credentials);
 	const now = Date.now();
 	const cacheEntry = TYPE_CACHE.get(cacheKey);

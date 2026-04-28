@@ -7,6 +7,7 @@ import type {
 import {
 	assertNoGraphQLErrors,
 	executeShopifyGraphql,
+	getSelectedShopifyCredentials,
 	hasUsableShopifyCredentials,
 } from '../graphql/client';
 import {
@@ -70,11 +71,12 @@ async function getCacheKeyFromCredentials(
 	context: ShopifyTranslationContext,
 ): Promise<string | undefined> {
 	try {
-		const credentials = (await context.getCredentials('shopifyCustomAdminApi')) as IDataObject;
-		if (!hasUsableShopifyCredentials(credentials)) {
+		const { authentication, credentialName, credentials } =
+			await getSelectedShopifyCredentials(context);
+		if (!hasUsableShopifyCredentials(credentials, authentication)) {
 			return undefined;
 		}
-		return getCacheKey(credentials);
+		return `${credentialName}::${getCacheKey(credentials)}`;
 	} catch {
 		return undefined;
 	}

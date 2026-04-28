@@ -26,7 +26,11 @@ import {
 	getCollectionRuleRelationOptions,
 } from './shared/collections/ruleConditions';
 import { throwIfUserErrors, getErrorData } from './shared/errors';
-import { assertNoGraphQLErrors, executeShopifyGraphql } from './shared/graphql/client';
+import {
+	assertNoGraphQLErrors,
+	executeShopifyGraphql,
+	getSelectedShopifyCredentials,
+} from './shared/graphql/client';
 import { getRegistryOperation } from './shared/graphql/registry';
 import { STAGED_UPLOADS_CREATE_MUTATION } from './shared/graphql/templates/file';
 import {
@@ -177,6 +181,28 @@ function mergeDisplayOptions(
 
 function buildProperties(): INodeProperties[] {
 	const properties: INodeProperties[] = [];
+
+	properties.push({
+		displayName: 'Authentication',
+		name: 'authentication',
+		type: 'options',
+		noDataExpression: true,
+		default: 'adminApi',
+		options: [
+			{
+				name: 'Admin API Credentials',
+				value: 'adminApi',
+				description:
+					'Use the legacy Admin Access Token flow or Dev Dashboard client credentials from the custom Admin API credential',
+			},
+			{
+				name: 'OAuth2',
+				value: 'oAuth2',
+				description:
+					'Authorize the store through Shopify OAuth and let n8n manage the OAuth token lifecycle',
+			},
+		],
+	});
 
 	const resourceOptions: INodePropertyOptions[] = SHOPIFY_RESOURCE_DEFINITIONS.map((resourceDefinition) => ({
 		name: resourceDefinition.name,
@@ -1737,6 +1763,20 @@ export class ShopifyCustom implements INodeType {
 			{
 				name: 'shopifyCustomAdminApi',
 				required: true,
+				displayOptions: {
+					show: {
+						authentication: ['adminApi'],
+					},
+				},
+			},
+			{
+				name: 'shopifyCustomOAuth2Api',
+				required: true,
+				displayOptions: {
+					show: {
+						authentication: ['oAuth2'],
+					},
+				},
 			},
 		],
 		properties: buildProperties(),
@@ -1846,7 +1886,7 @@ export class ShopifyCustom implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 		let adminApiVersion: string | undefined;
 		try {
-			const credentials = await this.getCredentials('shopifyCustomAdminApi');
+			const { credentials } = await getSelectedShopifyCredentials(this);
 			adminApiVersion =
 				typeof credentials.apiVersion === 'string' ? credentials.apiVersion.trim() : undefined;
 		} catch {

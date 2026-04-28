@@ -4,12 +4,14 @@ import type {
 	IHookFunctions,
 	IHttpRequestOptions,
 	ILoadOptionsFunctions,
+	IOAuth2Options,
 	ITriggerFunctions,
 	IWebhookFunctions,
 } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 
-export const SHOPIFY_CUSTOM_CREDENTIAL_NAME = 'shopifyCustomAdminApi';
+export const SHOPIFY_CUSTOM_ADMIN_CREDENTIAL_NAME = 'shopifyCustomAdminApi';
+export const SHOPIFY_CUSTOM_OAUTH2_CREDENTIAL_NAME = 'shopifyCustomOAuth2Api';
 
 type ShopifyFunctionContext =
 	| IExecuteFunctions
@@ -18,6 +20,7 @@ type ShopifyFunctionContext =
 	| ITriggerFunctions
 	| IWebhookFunctions;
 
+export type ShopifyNodeAuthentication = 'adminApi' | 'oAuth2';
 type ShopifyAuthenticationMethod = 'accessToken' | 'clientCredentials';
 
 interface IShopifyGraphQLError {
@@ -49,8 +52,23 @@ export interface IShopifyCredentialData extends IDataObject {
 	webhookSecret?: string;
 }
 
+export interface IShopifyOAuth2CredentialData extends IDataObject {
+	shopSubdomain: string;
+	apiVersion?: string;
+	clientId?: string;
+	clientSecret?: string;
+	webhookSecret?: string;
+	oauthTokenData?: IDataObject;
+}
+
+export type ShopifyAnyCredentialData = IShopifyCredentialData | IShopifyOAuth2CredentialData;
+
 const ACCESS_TOKEN_TTL_SAFETY_MS = 60 * 1000;
 const CLIENT_CREDENTIALS_TOKEN_CACHE = new Map<string, { token: string; expiresAt: number }>();
+const SHOPIFY_OAUTH2_HEADER_OPTIONS: IOAuth2Options = {
+	tokenType: 'Bearer',
+	keyToIncludeInAccessTokenHeader: 'X-Shopify-Access-Token',
+};
 
 export function normalizeShopSubdomain(input: string): string {
 	return input.trim().replace(/^https?:\/\//, '').replace(/\.myshopify\.com\/?$/, '');
@@ -83,13 +101,54 @@ export function resolveAuthenticationMethod(
 	return 'clientCredentials';
 }
 
-export function hasUsableShopifyCredentials(credentials: IDataObject): boolean {
-	const typedCredentials = credentials as IShopifyCredentialData;
-	const shopSubdomain = toOptionalString(typedCredentials.shopSubdomain);
+export function resolveNodeAuthentication(context: ShopifyFunctionContext): ShopifyNodeAuthentication {
+	const authentication =
+		'getInputData' in context
+			? (context as IExecuteFunctions).getNodeParameter('authentication', 0, 'adminApi')
+			: (context as ILoadOptionsFunctions | IHookFunctions | ITriggerFunctions | IWebhookFunctions)
+					.getNodeParameter('authentication', 'adminApi');
+
+	return authentication === 'oAuth2' ? 'oAuth2' : 'adminApi';
+}
+
+export async function getSelectedShopifyCredentials(
+	context: ShopifyFunctionContext,
+): Promise<{
+	authentication: ShopifyNodeAuthentication;
+	credentialName: string;
+	credentials: ShopifyAnyCredentialData;
+}> {
+	const authentication = resolveNodeAuthentication(context);
+	const credentialName =
+		authentication === 'oAuth2'
+			? SHOPIFY_CUSTOM_OAUTH2_CREDENTIAL_NAME
+			: SHOPIFY_CUSTOM_ADMIN_CREDENTIAL_NAME;
+
+	const credentials = (await context.getCredentials(credentialName)) as ShopifyAnyCredentialData;
+	return {
+		authentication,
+		credentialName,
+		credentials,
+	};
+}
+
+export function hasUsableShopifyCredentials(
+	credentials: IDataObject,
+	authentication: ShopifyNodeAuthentication = 'adminApi',
+): boolean {
+	const shopSubdomain = toOptionalString(credentials.shopSubdomain);
 	if (!shopSubdomain) {
 		return false;
 	}
 
+	if (authentication === 'oAuth2') {
+		return (
+			Boolean(toOptionalString(credentials.clientId)) &&
+			Boolean(toOptionalString(credentials.clientSecret))
+		);
+	}
+
+	const typedCredentials = credentials as IShopifyCredentialData;
 	const authenticationMethod = resolveAuthenticationMethod(typedCredentials);
 	if (authenticationMethod === 'accessToken') {
 		return Boolean(toOptionalString(typedCredentials.accessToken));
@@ -101,7 +160,7 @@ export function hasUsableShopifyCredentials(credentials: IDataObject): boolean {
 	);
 }
 
-export function buildGraphqlUrl(credentials: IShopifyCredentialData): string {
+export function buildGraphqlUrl(credentials: ShopifyAnyCredentialData): string {
 	const subdomain = normalizeShopSubdomain(credentials.shopSubdomain);
 	const apiVersion =
 		typeof credentials.apiVersion === 'string' && credentials.apiVersion.trim().length > 0
@@ -242,20 +301,50 @@ export async function executeShopifyGraphql<TData = IDataObject>(
 	variables: IDataObject = {},
 	itemIndex = 0,
 ): Promise<IShopifyGraphQLResponse<TData>> {
-	const credentials = (await context.getCredentials(
-		SHOPIFY_CUSTOM_CREDENTIAL_NAME,
-	)) as IShopifyCredentialData;
+	const { authentication, credentialName, credentials } = await getSelectedShopifyCredentials(
+		context,
+	);
 	const url = buildGraphqlUrl(credentials);
+
+	if (authentication === 'oAuth2') {
+		try {
+			const response = (await context.helpers.httpRequestWithAuthentication.call(
+				context,
+				credentialName,
+				{
+					url,
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						Accept: 'application/json',
+					},
+					body: {
+						query,
+						variables,
+					},
+					json: true,
+				},
+				{
+					oauth2: SHOPIFY_OAUTH2_HEADER_OPTIONS,
+				},
+			)) as IShopifyGraphQLResponse<TData>;
+
+			return response;
+		} catch (error) {
+			throw new NodeOperationError(context.getNode(), error as Error, { itemIndex });
+		}
+	}
 
 	let lastError: unknown;
 	let refreshedClientCredentialsToken = false;
 	const maxAttempts = 3;
+	const typedCredentials = credentials as IShopifyCredentialData;
 
 	for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
 		try {
 			const accessToken = await resolveAdminAccessToken(
 				context,
-				credentials,
+				typedCredentials,
 				itemIndex,
 				refreshedClientCredentialsToken,
 			);
@@ -283,11 +372,11 @@ export async function executeShopifyGraphql<TData = IDataObject>(
 			lastError = error;
 
 			if (
-				resolveAuthenticationMethod(credentials) === 'clientCredentials' &&
+				resolveAuthenticationMethod(typedCredentials) === 'clientCredentials' &&
 				isAuthenticationError(error) &&
 				!refreshedClientCredentialsToken
 			) {
-				clearCachedClientCredentialsAccessToken(credentials);
+				clearCachedClientCredentialsAccessToken(typedCredentials);
 				refreshedClientCredentialsToken = true;
 				continue;
 			}

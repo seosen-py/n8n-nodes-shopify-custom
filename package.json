@@ -43,7 +43,8 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/ShopifyCustomAdminApi.credentials.js"
+			"dist/credentials/ShopifyCustomAdminApi.credentials.js",
+			"dist/credentials/ShopifyCustomOAuth2Api.credentials.js"
 		],
 		"nodes": [
 			"dist/nodes/ShopifyCustom/ShopifyCustom.node.js",

@@ -13,7 +13,11 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-import { assertNoGraphQLErrors, executeShopifyGraphql } from '../ShopifyCustom/shared/graphql/client';
+import {
+	assertNoGraphQLErrors,
+	executeShopifyGraphql,
+	getSelectedShopifyCredentials,
+} from '../ShopifyCustom/shared/graphql/client';
 import {
 	WEBHOOK_SUBSCRIPTION_CREATE_MUTATION,
 	WEBHOOK_SUBSCRIPTION_DELETE_MUTATION,
@@ -383,8 +387,9 @@ async function deleteStoredWebhookSubscriptions(context: IHookFunctions): Promis
 }
 
 async function validateTriggerCredentials(context: IHookFunctions | IWebhookFunctions): Promise<string> {
-	const credentials = await context.getCredentials<IShopifyWebhookCredentials>('shopifyCustomAdminApi');
-	const webhookSecret = getWebhookSecret(credentials);
+	const { credentials } = await getSelectedShopifyCredentials(context);
+	const webhookCredentials = credentials as IShopifyWebhookCredentials;
+	const webhookSecret = getWebhookSecret(webhookCredentials);
 	if (!webhookSecret) {
 		throw new NodeOperationError(
 			context.getNode(),
@@ -415,9 +420,44 @@ export class ShopifyCustomTrigger implements INodeType {
 			{
 				name: 'shopifyCustomAdminApi',
 				required: true,
+				displayOptions: {
+					show: {
+						authentication: ['adminApi'],
+					},
+				},
+			},
+			{
+				name: 'shopifyCustomOAuth2Api',
+				required: true,
+				displayOptions: {
+					show: {
+						authentication: ['oAuth2'],
+					},
+				},
 			},
 		],
 		properties: [
+			{
+				displayName: 'Authentication',
+				name: 'authentication',
+				type: 'options',
+				noDataExpression: true,
+				default: 'adminApi',
+				options: [
+					{
+						name: 'Admin API Credentials',
+						value: 'adminApi',
+						description:
+							'Use the legacy Admin Access Token flow or Dev Dashboard client credentials from the custom Admin API credential',
+					},
+					{
+						name: 'OAuth2',
+						value: 'oAuth2',
+						description:
+							'Authorize the store through Shopify OAuth and let n8n manage the OAuth token lifecycle',
+					},
+				],
+			},
 			{
 				displayName: 'Resource',
 				name: 'resource',
