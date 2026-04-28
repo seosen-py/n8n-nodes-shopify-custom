@@ -52,16 +52,6 @@ export class ShopifyCustomOAuth2Api implements ICredentialType {
 			description: 'Shopify also labels this field as API secret key',
 		},
 		{
-			displayName: 'Scopes',
-			name: 'scope',
-			type: 'string',
-			default: '',
-			required: true,
-			placeholder: 'read_products,write_products',
-			description:
-				'Comma-separated scopes to request during OAuth authorization. Keep this aligned with the app scopes configured in Shopify.',
-		},
-		{
 			displayName: 'Webhook Secret',
 			name: 'webhookSecret',
 			type: 'string',
@@ -72,6 +62,12 @@ export class ShopifyCustomOAuth2Api implements ICredentialType {
 			required: false,
 			description:
 				'Used to verify Shopify webhook signatures for trigger nodes. Leave empty to reuse Client Secret.',
+		},
+		{
+			displayName: 'Scope',
+			name: 'scope',
+			type: 'hidden',
+			default: '',
 		},
 		{
 			displayName: 'Grant Type',
