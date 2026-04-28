@@ -3,6 +3,7 @@ import type {
 	ICredentialTestRequest,
 	ICredentialType,
 	IDataObject,
+	IHttpRequestHelper,
 	Icon,
 	INodeProperties,
 } from 'n8n-workflow';
@@ -114,27 +115,68 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
-				'X-Shopify-Access-Token':
-					'={{$credentials.authenticationMethod === "accessToken" ? $credentials.accessToken.trim() : ""}}',
+				'X-Shopify-Access-Token': '={{$credentials.accessToken.trim()}}',
 			},
 		},
 	};
 
-	test: ICredentialTestRequest = {
-			request: {
-				baseURL:
-					'={{"https://" + $credentials.shopSubdomain.trim().replace(".myshopify.com", "") + ".myshopify.com"}}',
-				url: '={{$credentials.authenticationMethod === "clientCredentials" ? "/admin/oauth/access_token" : "/admin/api/" + ($credentials.apiVersion || "2025-10") + "/graphql.json"}}',
-				method: 'POST',
-				headers: {
-					'Content-Type':
-						'={{$credentials.authenticationMethod === "clientCredentials" ? "application/x-www-form-urlencoded" : "application/json"}}',
-					'X-Shopify-Access-Token':
-						'={{$credentials.authenticationMethod === "accessToken" ? $credentials.accessToken.trim() : ""}}',
-				},
-				body:
-					'={{$credentials.authenticationMethod === "clientCredentials" ? "grant_type=client_credentials&client_id=" + encodeURIComponent($credentials.clientId.trim()) + "&client_secret=" + encodeURIComponent($credentials.clientSecret.trim()) : JSON.stringify({query: "query { shop { id name } }"})}}' as unknown as IDataObject,
-				json: false,
+	preAuthentication = async function (
+		this: IHttpRequestHelper,
+		credentials: IDataObject,
+	): Promise<IDataObject> {
+		if (credentials.authenticationMethod !== 'clientCredentials') {
+			return credentials;
+		}
+
+		const shopSubdomain = String(credentials.shopSubdomain ?? '')
+			.trim()
+			.replace(/^https?:\/\//, '')
+			.replace(/\.myshopify\.com\/?$/, '');
+		const clientId = String(credentials.clientId ?? '').trim();
+		const clientSecret = String(credentials.clientSecret ?? '').trim();
+
+		if (!shopSubdomain || !clientId || !clientSecret) {
+			return credentials;
+		}
+
+		const response = (await this.helpers.httpRequest({
+			url: `https://${shopSubdomain}.myshopify.com/admin/oauth/access_token`,
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+				Accept: 'application/json',
 			},
+			body: new URLSearchParams({
+				grant_type: 'client_credentials',
+				client_id: clientId,
+				client_secret: clientSecret,
+			}),
+			json: true,
+		})) as IDataObject;
+
+		const accessToken = String(response.access_token ?? '').trim();
+		if (!accessToken) {
+			return credentials;
+		}
+
+		return {
+			...credentials,
+			accessToken,
 		};
-	}
+	};
+
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL:
+				'={{"https://" + $credentials.shopSubdomain.trim().replace(".myshopify.com", "") + ".myshopify.com"}}',
+			url: '=/admin/api/{{$credentials.apiVersion || "2025-10"}}/graphql.json',
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: {
+				query: 'query { shop { id name } }',
+			},
+		},
+	};
+}
