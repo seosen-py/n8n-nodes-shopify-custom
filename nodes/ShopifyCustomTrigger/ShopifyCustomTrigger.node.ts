@@ -24,6 +24,7 @@ type ShopifyTriggerResource = 'order';
 
 interface IShopifyWebhookCredentials extends IDataObject {
 	webhookSecret?: string;
+	clientSecret?: string;
 }
 
 interface IShopifyWebhookUserError {
@@ -255,7 +256,7 @@ function setStoredSubscriptionIdsByTopic(
 }
 
 function getWebhookSecret(credentials: IShopifyWebhookCredentials): string | undefined {
-	return toOptionalString(credentials.webhookSecret);
+	return toOptionalString(credentials.webhookSecret) ?? toOptionalString(credentials.clientSecret);
 }
 
 function throwIfWebhookUserErrors(

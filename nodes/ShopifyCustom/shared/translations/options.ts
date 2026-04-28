@@ -4,7 +4,11 @@ import type {
 	ILoadOptionsFunctions,
 	INodePropertyOptions,
 } from 'n8n-workflow';
-import { assertNoGraphQLErrors, executeShopifyGraphql } from '../graphql/client';
+import {
+	assertNoGraphQLErrors,
+	executeShopifyGraphql,
+	hasUsableShopifyCredentials,
+} from '../graphql/client';
 import {
 	TRANSLATION_MARKETS_FROM_LOCALES_QUERY,
 	TRANSLATION_MARKETS_QUERY,
@@ -58,12 +62,6 @@ const LOCALES_CACHE = new Map<string, { expiresAt: number; data: IShopLocale[] }
 const MARKETS_CACHE = new Map<string, { expiresAt: number; data: IMarketNode[] }>();
 const TTL_MS = 2 * 60 * 1000;
 
-function hasUsableCredentials(credentials: IDataObject): boolean {
-	const shopSubdomain = String(credentials.shopSubdomain ?? '').trim();
-	const accessToken = String(credentials.accessToken ?? '').trim();
-	return shopSubdomain.length > 0 && accessToken.length > 0;
-}
-
 function getCacheKey(credentials: IDataObject): string {
 	return `${String(credentials.shopSubdomain)}::${String(credentials.apiVersion ?? '2025-10')}`;
 }
@@ -73,7 +71,7 @@ async function getCacheKeyFromCredentials(
 ): Promise<string | undefined> {
 	try {
 		const credentials = (await context.getCredentials('shopifyCustomAdminApi')) as IDataObject;
-		if (!hasUsableCredentials(credentials)) {
+		if (!hasUsableShopifyCredentials(credentials)) {
 			return undefined;
 		}
 		return getCacheKey(credentials);

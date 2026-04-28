@@ -29,6 +29,24 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 			description: 'Only subdomain without .myshopify.com suffix',
 		},
 		{
+			displayName: 'Authentication Method',
+			name: 'authenticationMethod',
+			type: 'options',
+			default: 'accessToken',
+			options: [
+				{
+					name: 'Client Credentials (Dev Dashboard)',
+					value: 'clientCredentials',
+					description: 'Exchange Client ID and Client Secret for a short-lived Admin API access token.',
+				},
+				{
+					name: 'Admin Access Token (Legacy)',
+					value: 'accessToken',
+					description: 'Use a static Admin API access token from an admin-created legacy custom app.',
+				},
+			],
+		},
+		{
 			displayName: 'Admin API Version',
 			name: 'apiVersion',
 			type: 'string',
@@ -44,6 +62,38 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 			},
 			default: '',
 			required: true,
+			displayOptions: {
+				show: {
+					authenticationMethod: ['accessToken'],
+				},
+			},
+		},
+		{
+			displayName: 'Client ID',
+			name: 'clientId',
+			type: 'string',
+			default: '',
+			required: true,
+			displayOptions: {
+				show: {
+					authenticationMethod: ['clientCredentials'],
+				},
+			},
+		},
+		{
+			displayName: 'Client Secret',
+			name: 'clientSecret',
+			type: 'string',
+			typeOptions: {
+				password: true,
+			},
+			default: '',
+			required: true,
+			displayOptions: {
+				show: {
+					authenticationMethod: ['clientCredentials'],
+				},
+			},
 		},
 		{
 			displayName: 'Webhook Secret',
@@ -55,7 +105,7 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 			default: '',
 			required: false,
 			description:
-				'App client secret used to verify Shopify webhook signatures for trigger nodes',
+				'Used to verify Shopify webhook signatures for trigger nodes. Leave empty to reuse Client Secret in Dev Dashboard mode.',
 		},
 	];
 
@@ -63,23 +113,34 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
-				'X-Shopify-Access-Token': '={{$credentials.accessToken.trim()}}',
+				'X-Shopify-Access-Token':
+					'={{$credentials.authenticationMethod === "accessToken" ? $credentials.accessToken.trim() : ""}}',
 			},
 		},
 	};
 
 	test: ICredentialTestRequest = {
-		request: {
-			baseURL:
-				'={{"https://" + $credentials.shopSubdomain.trim().replace(".myshopify.com", "") + ".myshopify.com"}}',
-			url: '=/admin/api/{{$credentials.apiVersion || "2025-10"}}/graphql.json',
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
+			request: {
+				baseURL:
+					'={{"https://" + $credentials.shopSubdomain.trim().replace(".myshopify.com", "") + ".myshopify.com"}}',
+				url: '={{$credentials.authenticationMethod === "clientCredentials" ? "/admin/oauth/access_token" : "/admin/api/" + ($credentials.apiVersion || "2025-10") + "/graphql.json"}}',
+				method: 'POST',
+				headers: {
+					'Content-Type':
+						'={{$credentials.authenticationMethod === "clientCredentials" ? "application/x-www-form-urlencoded" : "application/json"}}',
+					'X-Shopify-Access-Token':
+						'={{$credentials.authenticationMethod === "accessToken" ? $credentials.accessToken.trim() : ""}}',
+				},
+				body: {
+					grant_type:
+						'={{$credentials.authenticationMethod === "clientCredentials" ? "client_credentials" : ""}}',
+					client_id:
+						'={{$credentials.authenticationMethod === "clientCredentials" ? $credentials.clientId.trim() : ""}}',
+					client_secret:
+						'={{$credentials.authenticationMethod === "clientCredentials" ? $credentials.clientSecret.trim() : ""}}',
+					query:
+						'={{$credentials.authenticationMethod === "accessToken" ? "query { shop { id name } }" : ""}}',
+				},
 			},
-			body: {
-				query: 'query { shop { id name } }',
-			},
-		},
-	};
-}
+		};
+	}
