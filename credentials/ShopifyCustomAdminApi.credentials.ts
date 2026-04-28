@@ -2,6 +2,7 @@ import type {
 	IAuthenticateGeneric,
 	ICredentialTestRequest,
 	ICredentialType,
+	IDataObject,
 	Icon,
 	INodeProperties,
 } from 'n8n-workflow';
@@ -131,16 +132,9 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 					'X-Shopify-Access-Token':
 						'={{$credentials.authenticationMethod === "accessToken" ? $credentials.accessToken.trim() : ""}}',
 				},
-				body: {
-					grant_type:
-						'={{$credentials.authenticationMethod === "clientCredentials" ? "client_credentials" : ""}}',
-					client_id:
-						'={{$credentials.authenticationMethod === "clientCredentials" ? $credentials.clientId.trim() : ""}}',
-					client_secret:
-						'={{$credentials.authenticationMethod === "clientCredentials" ? $credentials.clientSecret.trim() : ""}}',
-					query:
-						'={{$credentials.authenticationMethod === "accessToken" ? "query { shop { id name } }" : ""}}',
-				},
+				body:
+					'={{$credentials.authenticationMethod === "clientCredentials" ? "grant_type=client_credentials&client_id=" + encodeURIComponent($credentials.clientId.trim()) + "&client_secret=" + encodeURIComponent($credentials.clientSecret.trim()) : JSON.stringify({query: "query { shop { id name } }"})}}' as unknown as IDataObject,
+				json: false,
 			},
 		};
 	}
