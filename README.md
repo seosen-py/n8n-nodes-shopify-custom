@@ -103,6 +103,7 @@ Most resources support:
 - **Orders:**
   - **Get / Get Many:**
     - Allows you to get one order or a list of orders
+    - Returns detailed order data, including totals, addresses, customer, line items, shipping lines, discounts, fulfillments, transactions, refunds, returns, and risk assessment
     - Supports optional metafields loading with values
   - **Create / Update:**
     - **Fields supported:**
@@ -232,6 +233,10 @@ To use the node, create a Shopify **Custom App**:
 * read_customers, write_customers
 * read_orders, write_orders
 * read_draft_orders, write_draft_orders
+* read_returns
+* read_assigned_fulfillment_orders, read_merchant_managed_fulfillment_orders, read_third_party_fulfillment_orders
+* read_locations
+* read_inventory
 * read_metaobjects, write_metaobjects
 * read_metaobject_definitions, write_metaobject_definitions
 * read_translations, write_translations

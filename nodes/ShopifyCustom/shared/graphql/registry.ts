@@ -299,6 +299,37 @@ function getMetafieldReadVariables(parameters: IDataObject): IDataObject {
 	};
 }
 
+function clampConnectionLimit(value: unknown, fallback: number): number {
+	const parsed = asNumber(value) ?? fallback;
+	return Math.min(250, Math.max(1, Math.trunc(parsed)));
+}
+
+function getOrderReadVariables(parameters: IDataObject): IDataObject {
+	const options = isObject(parameters.orderReadOptions) ? parameters.orderReadOptions : {};
+
+	return {
+		includeCustomer: asBoolean(options.includeCustomer) ?? true,
+		includeLineItems: asBoolean(options.includeLineItems) ?? true,
+		lineItemsFirst: clampConnectionLimit(options.lineItemsLimit, 100),
+		includeShippingLines: asBoolean(options.includeShippingLines) ?? true,
+		shippingLinesFirst: clampConnectionLimit(options.shippingLinesLimit, 50),
+		includeDiscountApplications: asBoolean(options.includeDiscountApplications) ?? true,
+		discountApplicationsFirst: clampConnectionLimit(options.discountApplicationsLimit, 50),
+		includeFulfillments: asBoolean(options.includeFulfillments) ?? true,
+		fulfillmentsFirst: clampConnectionLimit(options.fulfillmentsLimit, 25),
+		fulfillmentLineItemsFirst: clampConnectionLimit(options.fulfillmentLineItemsLimit, 50),
+		includeTransactions: asBoolean(options.includeTransactions) ?? true,
+		transactionsFirst: clampConnectionLimit(options.transactionsLimit, 50),
+		includeRefunds: asBoolean(options.includeRefunds) ?? true,
+		refundsFirst: clampConnectionLimit(options.refundsLimit, 50),
+		refundLineItemsFirst: clampConnectionLimit(options.refundLineItemsLimit, 50),
+		includeReturns: asBoolean(options.includeReturns) ?? true,
+		returnsFirst: clampConnectionLimit(options.returnsLimit, 50),
+		returnLineItemsFirst: clampConnectionLimit(options.returnLineItemsLimit, 50),
+		includeRisk: asBoolean(options.includeRisk) ?? true,
+	};
+}
+
 function getPathValue(source: IDataObject, path: string[]): unknown {
 	let current: unknown = source;
 	for (const chunk of path) {
@@ -386,23 +417,56 @@ function normalizeMetafieldArray(value: unknown): IDataObject[] {
 	return value.filter(isObject).map(normalizeMetafieldNode);
 }
 
+function isNodesConnection(value: unknown): value is IDataObject & { nodes: unknown[] } {
+	return isObject(value) && Array.isArray(value.nodes);
+}
+
+function normalizeNestedValue(value: unknown): unknown {
+	if (Array.isArray(value)) {
+		return value.map((item) => (isObject(item) ? normalizeNode(item) : item));
+	}
+
+	if (isNodesConnection(value)) {
+		return value.nodes.map((item) => (isObject(item) ? normalizeNode(item) : item));
+	}
+
+	if (isObject(value)) {
+		return normalizeNode(value);
+	}
+
+	return value;
+}
+
 function normalizeNode(node: IDataObject): IDataObject {
 	const normalized: IDataObject = { ...node };
 	let changed = false;
 
-	if (isObject(node.metafield)) {
-		normalized.metafield = normalizeMetafieldNode(node.metafield as IDataObject);
-		changed = true;
-	}
+	for (const [key, value] of Object.entries(node)) {
+		if (key === 'metafield' && isObject(value)) {
+			normalized[key] = normalizeMetafieldNode(value as IDataObject) as never;
+			changed = true;
+			continue;
+		}
 
-	if (isObject(node.metafields) && Array.isArray(node.metafields.nodes)) {
-		normalized.metafields = normalizeMetafieldArray(node.metafields.nodes);
-		changed = true;
-	}
+		if (key === 'metafields') {
+			if (isNodesConnection(value)) {
+				normalized[key] = normalizeMetafieldArray(value.nodes) as never;
+				changed = true;
+				continue;
+			}
 
-	if (Array.isArray(node.metafields)) {
-		normalized.metafields = normalizeMetafieldArray(node.metafields);
-		changed = true;
+			if (Array.isArray(value)) {
+				normalized[key] = normalizeMetafieldArray(value) as never;
+				changed = true;
+				continue;
+			}
+		}
+
+		const nestedValue = normalizeNestedValue(value);
+		if (nestedValue !== value) {
+			normalized[key] = nestedValue as never;
+			changed = true;
+		}
 	}
 
 	return changed ? normalized : node;
@@ -1484,6 +1548,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		buildVariables: (parameters) => ({
 			id: asString(parameters.orderId),
 			...getMetafieldReadVariables(parameters),
+			...getOrderReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['order']),
 	},
@@ -1492,6 +1557,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		buildVariables: (parameters) => ({
 			...getConnectionVariables(parameters),
 			...getMetafieldReadVariables(parameters),
+			...getOrderReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['orders']),
 		pagination: {

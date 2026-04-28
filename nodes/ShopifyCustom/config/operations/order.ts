@@ -67,6 +67,233 @@ function orderBaseFields(): INodeProperties[] {
 	];
 }
 
+function orderReadOptionFields(): INodeProperties[] {
+	return [
+		{
+			displayName: 'Order Details',
+			name: 'orderReadOptions',
+			type: 'collection',
+			placeholder: 'Add detail option',
+			default: {},
+			options: [
+				{
+					displayName: 'Discount Applications Limit',
+					name: 'discountApplicationsLimit',
+					type: 'number',
+					default: 50,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeDiscountApplications: [true],
+						},
+					},
+				},
+				{
+					displayName: 'Fulfillment Line Items Limit',
+					name: 'fulfillmentLineItemsLimit',
+					type: 'number',
+					default: 50,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeFulfillments: [true],
+						},
+					},
+				},
+				{
+					displayName: 'Fulfillments Limit',
+					name: 'fulfillmentsLimit',
+					type: 'number',
+					default: 25,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeFulfillments: [true],
+						},
+					},
+				},
+				{
+					displayName: 'Include Customer',
+					name: 'includeCustomer',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to include the related customer object',
+				},
+				{
+					displayName: 'Include Discount Applications',
+					name: 'includeDiscountApplications',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to include order-level discount applications',
+				},
+				{
+					displayName: 'Include Fulfillments',
+					name: 'includeFulfillments',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to include fulfillments, tracking, fulfillment service, and location details',
+				},
+				{
+					displayName: 'Include Line Items',
+					name: 'includeLineItems',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to include order line items with pricing, tax, product, and variant details',
+				},
+				{
+					displayName: 'Include Refunds',
+					name: 'includeRefunds',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to include refunds and refund line items',
+				},
+				{
+					displayName: 'Include Returns',
+					name: 'includeReturns',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to include returns and return line items',
+				},
+				{
+					displayName: 'Include Risk Assessment',
+					name: 'includeRisk',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to include Shopify order risk assessment data',
+				},
+				{
+					displayName: 'Include Shipping Lines',
+					name: 'includeShippingLines',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to include shipping lines and their taxes',
+				},
+				{
+					displayName: 'Include Transactions',
+					name: 'includeTransactions',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to include order transactions',
+				},
+				{
+					displayName: 'Line Items Limit',
+					name: 'lineItemsLimit',
+					type: 'number',
+					default: 100,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeLineItems: [true],
+						},
+					},
+				},
+				{
+					displayName: 'Refund Line Items Limit',
+					name: 'refundLineItemsLimit',
+					type: 'number',
+					default: 50,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeRefunds: [true],
+						},
+					},
+				},
+				{
+					displayName: 'Refunds Limit',
+					name: 'refundsLimit',
+					type: 'number',
+					default: 50,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeRefunds: [true],
+						},
+					},
+				},
+				{
+					displayName: 'Return Line Items Limit',
+					name: 'returnLineItemsLimit',
+					type: 'number',
+					default: 50,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeReturns: [true],
+						},
+					},
+				},
+				{
+					displayName: 'Returns Limit',
+					name: 'returnsLimit',
+					type: 'number',
+					default: 50,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeReturns: [true],
+						},
+					},
+				},
+				{
+					displayName: 'Shipping Lines Limit',
+					name: 'shippingLinesLimit',
+					type: 'number',
+					default: 50,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeShippingLines: [true],
+						},
+					},
+				},
+				{
+					displayName: 'Transactions Limit',
+					name: 'transactionsLimit',
+					type: 'number',
+					default: 50,
+					typeOptions: {
+						minValue: 1,
+						maxValue: 250,
+					},
+					displayOptions: {
+						show: {
+							includeTransactions: [true],
+						},
+					},
+				},
+			],
+		},
+	];
+}
+
 export const ORDER_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 	{
 		resource: 'order',
@@ -83,7 +310,11 @@ export const ORDER_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get',
 		description: 'Get an order by ID',
 		registryKey: 'order.get',
-		fields: [gidField('orderId', 'Order ID', 'Global order ID in Shopify'), ...readMetafieldsFields()],
+		fields: [
+			gidField('orderId', 'Order ID', 'Global order ID in Shopify'),
+			...readMetafieldsFields(),
+			...orderReadOptionFields(),
+		],
 	},
 	{
 		resource: 'order',
@@ -91,7 +322,7 @@ export const ORDER_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many orders',
 		registryKey: 'order.getMany',
-		fields: paginationFields(ORDER_SORT_OPTIONS),
+		fields: [...paginationFields(ORDER_SORT_OPTIONS), ...orderReadOptionFields()],
 	},
 	{
 		resource: 'order',
