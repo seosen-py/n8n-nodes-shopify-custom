@@ -396,12 +396,7 @@ const ORDER_READ_FIELDS = `
 					id
 					quantity
 					refundableQuantity
-					returnReasonDefinition {
-						id
-						handle
-						name
-						deleted
-					}
+					returnReason
 					returnReasonNote
 					... on ReturnLineItem {
 						fulfillmentLineItem {
