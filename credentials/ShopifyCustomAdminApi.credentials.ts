@@ -1,5 +1,5 @@
 import type {
-	IAuthenticateGeneric,
+	IAuthenticate,
 	ICredentialTestRequest,
 	ICredentialType,
 	IDataObject,
@@ -132,13 +132,23 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 		},
 	];
 
-	authenticate: IAuthenticateGeneric = {
-		type: 'generic',
-		properties: {
+	authenticate: IAuthenticate = async (credentials, requestOptions) => {
+		if (credentials.authenticationMethod === 'clientCredentials') {
+			return requestOptions;
+		}
+
+		const accessToken = String(credentials.accessToken ?? '').trim();
+		if (!accessToken) {
+			return requestOptions;
+		}
+
+		return {
+			...requestOptions,
 			headers: {
-				'X-Shopify-Access-Token': '={{$credentials.accessToken.trim()}}',
+				...(requestOptions.headers ?? {}),
+				'X-Shopify-Access-Token': accessToken,
 			},
-		},
+		};
 	};
 
 	preAuthentication = async function (
@@ -194,15 +204,15 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			baseURL:
-				'={{"https://" + $credentials.shopSubdomain.trim().replace(".myshopify.com", "") + ".myshopify.com"}}',
-			url: '=/admin/api/{{$credentials.apiVersion || "2025-10"}}/graphql.json',
+				'={{"https://" + String($credentials.shopSubdomain || "").trim().replace(/^https?:\\/\\//, "").replace(/\\.myshopify\\.com\\/?$/, "") + ".myshopify.com"}}',
+			url: '={{$credentials.authenticationMethod === "clientCredentials" ? "/admin/oauth/access_token" : "/admin/api/" + ($credentials.apiVersion || "2025-10") + "/graphql.json"}}',
 			method: 'POST',
 			headers: {
-				'Content-Type': 'application/json',
+				Accept: 'application/json',
+				'Content-Type':
+					'={{$credentials.authenticationMethod === "clientCredentials" ? "application/x-www-form-urlencoded" : "application/json"}}',
 			},
-			body: {
-				query: 'query { shop { id name } }',
-			},
+			body: '={{$credentials.authenticationMethod === "clientCredentials" ? "grant_type=client_credentials&client_id=" + encodeURIComponent(String($credentials.clientId || "").trim()) + "&client_secret=" + encodeURIComponent(String($credentials.clientSecret || "").trim()) : JSON.stringify({ query: "query { shop { id name } }" })}}',
 		},
 	};
 }
