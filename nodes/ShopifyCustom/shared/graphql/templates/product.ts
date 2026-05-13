@@ -1,5 +1,15 @@
 import { OPTIONAL_METAFIELDS_CONNECTION, SEO_FIELDS, USER_ERRORS_FIELDS } from './commonFragments';
 
+const PRODUCT_CATEGORY_FIELDS = `
+	id
+	name
+	fullName
+	level
+	isLeaf
+	isArchived
+	parentId
+`;
+
 export const PRODUCT_CREATE_MUTATION = `
 mutation ProductCreate($product: ProductCreateInput!) {
 	productCreate(product: $product) {
@@ -36,6 +46,9 @@ query ProductGet(
 		vendor
 		productType
 		tags
+		category {
+			${PRODUCT_CATEGORY_FIELDS}
+		}
 		seo {
 			${SEO_FIELDS}
 		}
@@ -66,6 +79,9 @@ query ProductGetMany(
 			status
 			vendor
 			productType
+			category {
+				${PRODUCT_CATEGORY_FIELDS}
+			}
 			seo {
 				${SEO_FIELDS}
 			}
@@ -88,8 +104,28 @@ mutation ProductUpdate($product: ProductUpdateInput!) {
 			title
 			handle
 			status
+			category {
+				${PRODUCT_CATEGORY_FIELDS}
+			}
 			seo {
 				${SEO_FIELDS}
+			}
+			updatedAt
+		}
+		${USER_ERRORS_FIELDS}
+	}
+}
+`;
+
+export const PRODUCT_SET_CATEGORY_MUTATION = `
+mutation ProductSetCategory($product: ProductUpdateInput!) {
+	productUpdate(product: $product) {
+		product {
+			id
+			title
+			handle
+			category {
+				${PRODUCT_CATEGORY_FIELDS}
 			}
 			updatedAt
 		}

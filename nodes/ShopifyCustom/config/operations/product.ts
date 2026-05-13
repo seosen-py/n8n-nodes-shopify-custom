@@ -118,6 +118,17 @@ export const PRODUCT_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 	},
 	{
 		resource: 'product',
+		value: 'setCategory',
+		name: 'Set Category',
+		description: 'Set the Shopify product taxonomy category for a product',
+		registryKey: 'product.setCategory',
+		fields: [
+			gidField('productId', 'Product ID', 'Global product ID in Shopify'),
+			gidField('categoryId', 'Category ID', 'Global taxonomy category ID in Shopify'),
+		],
+	},
+	{
+		resource: 'product',
 		value: 'delete',
 		name: 'Delete',
 		description: 'Delete a product',

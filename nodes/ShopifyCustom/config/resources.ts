@@ -10,6 +10,7 @@ export type ShopifyResourceValue =
 	| 'inventory'
 	| 'file'
 	| 'translation'
+	| 'taxonomy'
 	| 'metaobject'
 	| 'metafieldValue'
 	| 'metafieldDefinition'
@@ -95,6 +96,11 @@ export const SHOPIFY_RESOURCE_DEFINITIONS: IShopifyResourceDefinition[] = [
 		value: 'translation',
 		name: 'Translation',
 		description: 'Manage translated content for Shopify resources',
+	},
+	{
+		value: 'taxonomy',
+		name: 'Taxonomy',
+		description: 'Search and navigate Shopify product taxonomy categories',
 	},
 	{
 		value: 'metaobject',

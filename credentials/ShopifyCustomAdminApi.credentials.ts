@@ -8,6 +8,26 @@ import type {
 	INodeProperties,
 } from 'n8n-workflow';
 
+function getHttpErrorMessage(error: unknown): string {
+	if (!error || typeof error !== 'object') {
+		return String(error);
+	}
+
+	const typedError = error as IDataObject;
+	const response = typedError.response as IDataObject | undefined;
+	const body = (response?.body ?? typedError.body ?? typedError.message) as unknown;
+
+	if (typeof body === 'string') {
+		return body;
+	}
+
+	if (body && typeof body === 'object') {
+		return JSON.stringify(body);
+	}
+
+	return String(typedError.message ?? 'Unknown error');
+}
+
 export class ShopifyCustomAdminApi implements ICredentialType {
 	name = 'shopifyCustomAdminApi';
 
@@ -39,7 +59,8 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 				{
 					name: 'Client Credentials (Dev Dashboard)',
 					value: 'clientCredentials',
-					description: 'Exchange Client ID and Client Secret for a short-lived Admin API access token.',
+					description:
+						'Exchange Client ID and Client Secret for a short-lived Admin API access token. Requires the app and store to be in the same Shopify organization.',
 				},
 				{
 					name: 'Admin Access Token (Legacy)',
@@ -139,24 +160,29 @@ export class ShopifyCustomAdminApi implements ICredentialType {
 			return credentials;
 		}
 
-		const response = (await this.helpers.httpRequest({
-			url: `https://${shopSubdomain}.myshopify.com/admin/oauth/access_token`,
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/x-www-form-urlencoded',
-				Accept: 'application/json',
-			},
-			body: new URLSearchParams({
-				grant_type: 'client_credentials',
-				client_id: clientId,
-				client_secret: clientSecret,
-			}),
-			json: true,
-		})) as IDataObject;
+		let response: IDataObject;
+		try {
+			response = (await this.helpers.httpRequest({
+				url: `https://${shopSubdomain}.myshopify.com/admin/oauth/access_token`,
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+					Accept: 'application/json',
+				},
+				body: new URLSearchParams({
+					grant_type: 'client_credentials',
+					client_id: clientId,
+					client_secret: clientSecret,
+				}).toString(),
+				json: true,
+			})) as IDataObject;
+		} catch (error) {
+			throw new Error(`Shopify client credentials token exchange failed: ${getHttpErrorMessage(error)}`);
+		}
 
 		const accessToken = String(response.access_token ?? '').trim();
 		if (!accessToken) {
-			return credentials;
+			throw new Error('Shopify did not return an access token for the provided client credentials.');
 		}
 
 		return {

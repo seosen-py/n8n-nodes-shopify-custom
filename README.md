@@ -49,6 +49,7 @@ The single node **`Shopify Custom`** includes resource-based actions:
 | Draft Order | ✔ |
 | File | ✔ |
 | Translation | ✔ |
+| Taxonomy | ✔ |
 | Metaobject | ✔ |
 | Metafield Value | ✔ |
 | Metafield Definition | ✔ |
@@ -69,7 +70,10 @@ Most resources support:
 - **Products / Product Variants:**
   - **Get / Get Many:**
     - Allows you to get a list of your products
+    - Returns Shopify product taxonomy category details
     - Allows you to get product metafields and their values together with products
+  - **Set Category:**
+    - Assign a Shopify Standard Product Taxonomy category to a product
   - **Create / Update:**
     - **Fields supported**
       - **For products:**
@@ -161,6 +165,14 @@ Most resources support:
     - First run **Translation → Get** and copy `digest` from `translatableContent`
     - For metafields, use translation `key` = `value`
     - Register with the same key + digest; if original metafield value changes, fetch a new digest before next register
+
+- **Taxonomy:**
+  - **Search Categories:**
+    - Search Shopify Standard Product Taxonomy categories by text for AI-assisted product classification
+  - **Get Root Categories / Get Children / Get Descendants:**
+    - Navigate the taxonomy tree by category ID
+  - **Get Category / Get Category Attributes:**
+    - Inspect a selected category and its taxonomy attributes
 
 - **Metaobjects:**
   - **Get / Get Many:**
@@ -259,6 +271,8 @@ Create credential **Shopify Custom Admin API**:
 | Shop Subdomain | your-shop-name (without `.myshopify.com`) |
 | Admin API Version | default is fine |
 | Admin Access Token | token from Shopify |
+
+For **Client Credentials (Dev Dashboard)**, the app and store must belong to the same Shopify organization in the Dev Dashboard. If Shopify returns `shop_not_permitted`, create or move the development store under the same Dev Dashboard organization as the app.
 
 After saving, the node is ready to use.
 

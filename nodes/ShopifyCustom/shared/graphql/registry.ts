@@ -85,6 +85,7 @@ import {
 	PRODUCT_DELETE_MUTATION,
 	PRODUCT_GET_MANY_QUERY,
 	PRODUCT_GET_QUERY,
+	PRODUCT_SET_CATEGORY_MUTATION,
 	PRODUCT_UPDATE_MUTATION,
 } from './templates/product';
 import {
@@ -94,6 +95,11 @@ import {
 	PRODUCT_VARIANT_GET_QUERY,
 	PRODUCT_VARIANT_UPDATE_MUTATION,
 } from './templates/productVariant';
+import {
+	TAXONOMY_CATEGORIES_QUERY,
+	TAXONOMY_CATEGORY_ATTRIBUTES_QUERY,
+	TAXONOMY_CATEGORY_GET_QUERY,
+} from './templates/taxonomy';
 import type { IShopifyUserError } from '../errors';
 import type { ShopifyOperationKey } from '../../config/operations/types';
 import { decodeMetafieldRuleOptionValue } from '../collections/ruleConditions';
@@ -239,6 +245,24 @@ function getConnectionVariables(parameters: IDataObject): IDataObject {
 		query: asString(options.query ?? parameters.query),
 		sortKey: asString(sorting.sortKey ?? options.sortKey ?? parameters.sortKey),
 		reverse: asBoolean(sorting.reverse ?? options.reverse ?? parameters.reverse),
+	};
+}
+
+function getTaxonomyOptions(parameters: IDataObject): IDataObject {
+	return isObject(parameters.taxonomyOptions) ? parameters.taxonomyOptions : {};
+}
+
+function getTaxonomyCategoryConnectionVariables(
+	parameters: IDataObject,
+	filters: IDataObject = {},
+): IDataObject {
+	const options = getTaxonomyOptions(parameters);
+	const limit = asNumber(parameters.limit) ?? 50;
+
+	return {
+		first: Math.max(1, Math.trunc(limit)),
+		after: asString(options.afterCursor),
+		...filters,
 	};
 }
 
@@ -1174,6 +1198,17 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		mapSimplified: (data) => mapSingleNode(data, ['productUpdate', 'product']),
 		getUserErrors: (data) => parseUserErrors(data, ['productUpdate']),
 	},
+	'product.setCategory': {
+		document: PRODUCT_SET_CATEGORY_MUTATION,
+		buildVariables: (parameters) => ({
+			product: {
+				id: asString(parameters.productId),
+				category: asString(parameters.categoryId),
+			},
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['productUpdate', 'product']),
+		getUserErrors: (data) => parseUserErrors(data, ['productUpdate']),
+	},
 	'product.delete': {
 		document: PRODUCT_DELETE_MUTATION,
 		buildVariables: (parameters) => ({
@@ -1878,6 +1913,63 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 						.map((item) => ({ ...item }))
 				: [],
 		getUserErrors: (data) => parseUserErrors(data, ['translationsRemove']),
+	},
+	'taxonomy.searchCategories': {
+		document: TAXONOMY_CATEGORIES_QUERY,
+		buildVariables: (parameters) =>
+			getTaxonomyCategoryConnectionVariables(parameters, {
+				search: asString(parameters.search),
+			}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['taxonomy', 'categories']),
+		pagination: {
+			connectionPath: ['taxonomy', 'categories'],
+		},
+	},
+	'taxonomy.getRootCategories': {
+		document: TAXONOMY_CATEGORIES_QUERY,
+		buildVariables: (parameters) => getTaxonomyCategoryConnectionVariables(parameters),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['taxonomy', 'categories']),
+		pagination: {
+			connectionPath: ['taxonomy', 'categories'],
+		},
+	},
+	'taxonomy.getChildren': {
+		document: TAXONOMY_CATEGORIES_QUERY,
+		buildVariables: (parameters) =>
+			getTaxonomyCategoryConnectionVariables(parameters, {
+				childrenOf: asString(parameters.categoryId),
+			}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['taxonomy', 'categories']),
+		pagination: {
+			connectionPath: ['taxonomy', 'categories'],
+		},
+	},
+	'taxonomy.getDescendants': {
+		document: TAXONOMY_CATEGORIES_QUERY,
+		buildVariables: (parameters) =>
+			getTaxonomyCategoryConnectionVariables(parameters, {
+				descendantsOf: asString(parameters.categoryId),
+			}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['taxonomy', 'categories']),
+		pagination: {
+			connectionPath: ['taxonomy', 'categories'],
+		},
+	},
+	'taxonomy.get': {
+		document: TAXONOMY_CATEGORY_GET_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.categoryId),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['node']),
+	},
+	'taxonomy.getCategoryAttributes': {
+		document: TAXONOMY_CATEGORY_ATTRIBUTES_QUERY,
+		buildVariables: (parameters) => ({
+			id: asString(parameters.categoryId),
+			first: clampConnectionLimit(parameters.attributeLimit, 50),
+			valuesFirst: clampConnectionLimit(parameters.valueLimit, 50),
+		}),
+		mapSimplified: (data) => mapSingleNode(data, ['node']),
 	},
 	'metaobject.create': {
 		document: METAOBJECT_CREATE_MUTATION,

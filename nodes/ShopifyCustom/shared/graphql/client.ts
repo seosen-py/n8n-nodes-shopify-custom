@@ -210,6 +210,26 @@ function isAuthenticationError(error: unknown): boolean {
 	return statusCode === 401 || statusCode === 403;
 }
 
+function getHttpErrorMessage(error: unknown): string {
+	if (!error || typeof error !== 'object') {
+		return String(error);
+	}
+
+	const typedError = error as IDataObject;
+	const response = typedError.response as IDataObject | undefined;
+	const body = (response?.body ?? typedError.body ?? typedError.message) as unknown;
+
+	if (typeof body === 'string') {
+		return body;
+	}
+
+	if (body && typeof body === 'object') {
+		return JSON.stringify(body);
+	}
+
+	return String(typedError.message ?? 'Unknown error');
+}
+
 async function requestClientCredentialsAccessToken(
 	context: ShopifyFunctionContext,
 	credentials: IShopifyCredentialData,
@@ -236,20 +256,29 @@ async function requestClientCredentialsAccessToken(
 		return cachedEntry.token;
 	}
 
-	const response = (await context.helpers.httpRequest({
-		url: buildAccessTokenUrl(credentials),
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/x-www-form-urlencoded',
-			Accept: 'application/json',
-		},
-		body: new URLSearchParams({
-			grant_type: 'client_credentials',
-			client_id: clientId,
-			client_secret: clientSecret,
-		}),
-		json: true,
-	})) as IShopifyAccessTokenResponse;
+	let response: IShopifyAccessTokenResponse;
+	try {
+		response = (await context.helpers.httpRequest({
+			url: buildAccessTokenUrl(credentials),
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+				Accept: 'application/json',
+			},
+			body: new URLSearchParams({
+				grant_type: 'client_credentials',
+				client_id: clientId,
+				client_secret: clientSecret,
+			}).toString(),
+			json: true,
+		})) as IShopifyAccessTokenResponse;
+	} catch (error) {
+		throw new NodeOperationError(
+			context.getNode(),
+			`Shopify client credentials token exchange failed: ${getHttpErrorMessage(error)}`,
+			{ itemIndex },
+		);
+	}
 
 	const accessToken = toOptionalString(response.access_token);
 	if (!accessToken) {
