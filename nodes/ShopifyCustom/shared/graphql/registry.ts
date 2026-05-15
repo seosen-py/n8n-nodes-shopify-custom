@@ -96,6 +96,11 @@ import {
 	PRODUCT_VARIANT_UPDATE_MUTATION,
 } from './templates/productVariant';
 import {
+	PUBLICATION_GET_MANY_QUERY,
+	PUBLISHABLE_PUBLISH_MUTATION,
+	PUBLISHABLE_UNPUBLISH_MUTATION,
+} from './templates/publication';
+import {
 	TAXONOMY_CATEGORIES_QUERY,
 	TAXONOMY_CATEGORY_ATTRIBUTES_QUERY,
 	TAXONOMY_CATEGORY_GET_QUERY,
@@ -114,6 +119,7 @@ interface IRegistryPaginationConfig {
 export interface IRegistryOperation {
 	document: string;
 	buildVariables(parameters: IDataObject): IDataObject;
+	buildVariablesList?(parameters: IDataObject): IDataObject[];
 	mapSimplified(data: IDataObject): unknown;
 	getUserErrors?(data: IDataObject): IShopifyUserError[] | undefined;
 	pagination?: IRegistryPaginationConfig;
@@ -154,6 +160,44 @@ function asStringArray(value: unknown): string[] {
 	return value
 		.map((item) => asString(item))
 		.filter((item): item is string => !!item);
+}
+
+function parseDelimitedIds(value: unknown): string[] {
+	if (Array.isArray(value)) {
+		return Array.from(new Set(asStringArray(value)));
+	}
+
+	const raw = asString(value);
+	if (!raw) {
+		return [];
+	}
+
+	return Array.from(
+		new Set(
+			raw
+				.split(/[\n,]+/g)
+				.map((item) => item.trim())
+				.filter((item) => item.length > 0),
+		),
+	);
+}
+
+function parsePublicationInputs(value: unknown): IDataObject[] {
+	return parseDelimitedIds(value).map((publicationId) => ({ publicationId }));
+}
+
+function buildPublishablePublicationVariables(parameters: IDataObject): IDataObject[] {
+	const publicationInputs = parsePublicationInputs(parameters.publicationIds);
+	const productIds = parseDelimitedIds(parameters.productIds);
+
+	if (productIds.length === 0 || publicationInputs.length === 0) {
+		return [];
+	}
+
+	return productIds.map((productId) => ({
+		id: productId,
+		input: publicationInputs,
+	}));
 }
 
 function getSelectedReturnFields(parameters: IDataObject, defaultFields: string[] = []): Set<string> {
@@ -2018,6 +2062,31 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		pagination: {
 			connectionPath: ['files'],
 		},
+	},
+	'publication.getMany': {
+		document: PUBLICATION_GET_MANY_QUERY,
+		buildVariables: (parameters) => ({
+			first: Math.max(1, Math.trunc(asNumber(parameters.limit) ?? 50)),
+			after: asString(getPaginationOptions(parameters).afterCursor),
+		}),
+		mapSimplified: (data) => mapNodesFromConnection(data, ['publications']),
+		pagination: {
+			connectionPath: ['publications'],
+		},
+	},
+	'publication.publishProducts': {
+		document: PUBLISHABLE_PUBLISH_MUTATION,
+		buildVariables: (parameters) => buildPublishablePublicationVariables(parameters)[0] ?? {},
+		buildVariablesList: buildPublishablePublicationVariables,
+		mapSimplified: (data) => mapMutationPayload(data, ['publishablePublish']),
+		getUserErrors: (data) => parseUserErrors(data, ['publishablePublish']),
+	},
+	'publication.unpublishProducts': {
+		document: PUBLISHABLE_UNPUBLISH_MUTATION,
+		buildVariables: (parameters) => buildPublishablePublicationVariables(parameters)[0] ?? {},
+		buildVariablesList: buildPublishablePublicationVariables,
+		mapSimplified: (data) => mapMutationPayload(data, ['publishableUnpublish']),
+		getUserErrors: (data) => parseUserErrors(data, ['publishableUnpublish']),
 	},
 	'translation.get': {
 		document: TRANSLATION_GET_QUERY,

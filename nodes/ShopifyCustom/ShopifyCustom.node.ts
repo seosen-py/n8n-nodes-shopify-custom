@@ -385,6 +385,54 @@ async function runRegistryOperation(
 	const getAll = Boolean(parameters.getAll);
 	const canPaginate = registryOperation.pagination !== undefined;
 
+	if (registryOperation.buildVariablesList) {
+		const variablesList = registryOperation.buildVariablesList(parameters);
+		if (variablesList.length === 0) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				'No input IDs were provided for this operation',
+				{ itemIndex },
+			);
+		}
+
+		const simplifiedItems: IDataObject[] = [];
+		const rawResults: IDataObject[] = [];
+
+		for (const variables of variablesList) {
+			const response = await executeShopifyGraphql<IDataObject>(
+				executeFunctions,
+				registryOperation.document,
+				variables,
+				itemIndex,
+			);
+			assertNoGraphQLErrors(executeFunctions, response, itemIndex);
+			const data = (response.data ?? {}) as IDataObject;
+			rawResults.push({
+				variables,
+				data,
+				extensions: (response.extensions ?? {}) as IDataObject,
+			});
+
+			if (registryOperation.getUserErrors) {
+				throwIfUserErrors(
+					executeFunctions,
+					registryOperation.getUserErrors(data),
+					itemIndex,
+				);
+			}
+
+			const mapped = registryOperation.mapSimplified(data);
+			simplifiedItems.push(...toArrayOfObjects(mapped));
+		}
+
+		return {
+			simplified: simplifiedItems,
+			raw: {
+				results: rawResults,
+			},
+		};
+	}
+
 	if (getAll && canPaginate) {
 		const aggregatedItems: IDataObject[] = [];
 		const rawPages: IDataObject[] = [];

@@ -9,6 +9,7 @@ export type ShopifyResourceValue =
 	| 'draftOrder'
 	| 'inventory'
 	| 'file'
+	| 'publication'
 	| 'translation'
 	| 'taxonomy'
 	| 'metaobject'
@@ -91,6 +92,11 @@ export const SHOPIFY_RESOURCE_DEFINITIONS: IShopifyResourceDefinition[] = [
 		value: 'file',
 		name: 'File',
 		description: 'Manage Shopify files and media assets',
+	},
+	{
+		value: 'publication',
+		name: 'Publication',
+		description: 'Manage product publishing to Shopify sales channels',
 	},
 	{
 		value: 'translation',

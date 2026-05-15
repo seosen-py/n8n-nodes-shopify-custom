@@ -31,6 +31,7 @@ This package focuses on the features advanced Shopify workflows actually need:
 - ✅ Full **Metaobject** support  
 - ✅ Advanced **Collections** handling (Smart & Manual)  
 - ✅ Complete **Product Variant** operations  
+- ✅ Sales channel publication management for products
 - ✅ Significantly reduced need to work with GraphQL manually  
 
 ---
@@ -48,6 +49,7 @@ The single node **`Shopify Custom`** includes resource-based actions:
 | Order | ✔ |
 | Draft Order | ✔ |
 | File | ✔ |
+| Publication | ✔ |
 | Translation | ✔ |
 | Taxonomy | ✔ |
 | Metaobject | ✔ |
@@ -198,6 +200,14 @@ Most resources support:
     - Find images with `used_in:none`
     - `Dry Run` mode for safe preview before deletion
 
+- **Publications / Sales Channels:**
+  - **Get Many:**
+    - List Shopify publications used by sales channels
+    - Returns publication ID, catalog title, and auto-publish status
+  - **Publish Products / Unpublish Products:**
+    - Publish or unpublish one or many products to selected publications
+    - Accepts product GIDs and publication GIDs separated by commas or new lines
+
 ---
 
 ## 🧠 Metafields without the pain
@@ -249,6 +259,7 @@ To use the node, create a Shopify **Custom App**:
 * read_assigned_fulfillment_orders, read_merchant_managed_fulfillment_orders, read_third_party_fulfillment_orders
 * read_locations
 * read_inventory
+* read_publications, write_publications
 * read_metaobjects, write_metaobjects
 * read_metaobject_definitions, write_metaobject_definitions
 * read_translations, write_translations
