@@ -1,5 +1,5 @@
 import type { INodeProperties } from 'n8n-workflow';
-import { gidField } from './common';
+import { gidField, returnFieldsField } from './common';
 import type { IShopifyOperationConfig } from './types';
 
 const METAOBJECT_SORT_OPTIONS = [
@@ -8,6 +8,13 @@ const METAOBJECT_SORT_OPTIONS = [
 	{ name: 'Type', value: 'type' },
 	{ name: 'Updated At', value: 'updated_at' },
 ];
+
+const METAOBJECT_RETURN_FIELD_OPTIONS = [
+	{ name: 'Fields', value: 'fields' },
+	{ name: 'Field References', value: 'fieldReferences' },
+];
+
+const METAOBJECT_DEFAULT_RETURN_FIELDS = ['fields', 'fieldReferences'];
 
 const METAOBJECT_FIELDS_COLLECTION: INodeProperties = {
 	displayName: 'Fields',
@@ -148,7 +155,10 @@ export const METAOBJECT_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get',
 		description: 'Get a metaobject by ID',
 		registryKey: 'metaobject.get',
-		fields: [gidField('metaobjectId', 'Metaobject ID', 'Global metaobject ID in Shopify')],
+		fields: [
+			gidField('metaobjectId', 'Metaobject ID', 'Global metaobject ID in Shopify'),
+			returnFieldsField(METAOBJECT_RETURN_FIELD_OPTIONS, METAOBJECT_DEFAULT_RETURN_FIELDS),
+		],
 	},
 	{
 		resource: 'metaobject',
@@ -156,7 +166,10 @@ export const METAOBJECT_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many metaobjects by type',
 		registryKey: 'metaobject.getMany',
-		fields: metaobjectGetManyFields(),
+		fields: [
+			...metaobjectGetManyFields(),
+			returnFieldsField(METAOBJECT_RETURN_FIELD_OPTIONS, METAOBJECT_DEFAULT_RETURN_FIELDS),
+		],
 	},
 	{
 		resource: 'metaobject',
@@ -199,4 +212,3 @@ export const METAOBJECT_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		fields: [gidField('metaobjectId', 'Metaobject ID', 'Global metaobject ID in Shopify')],
 	},
 ];
-

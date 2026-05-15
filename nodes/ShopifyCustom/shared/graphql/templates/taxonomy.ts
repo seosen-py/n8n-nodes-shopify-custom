@@ -6,9 +6,9 @@ export const TAXONOMY_CATEGORY_FIELDS = `
 	isLeaf
 	isRoot
 	isArchived
-	parentId
-	childrenIds
-	ancestorIds
+	parentId @include(if: $includeParentId)
+	childrenIds @include(if: $includeChildrenIds)
+	ancestorIds @include(if: $includeAncestorIds)
 `;
 
 export const TAXONOMY_CATEGORIES_QUERY = `
@@ -18,6 +18,9 @@ query TaxonomyCategories(
 	$search: String
 	$childrenOf: ID
 	$descendantsOf: ID
+	$includeParentId: Boolean!
+	$includeChildrenIds: Boolean!
+	$includeAncestorIds: Boolean!
 ) {
 	taxonomy {
 		categories(
@@ -40,7 +43,12 @@ query TaxonomyCategories(
 `;
 
 export const TAXONOMY_CATEGORY_GET_QUERY = `
-query TaxonomyCategoryGet($id: ID!) {
+query TaxonomyCategoryGet(
+	$id: ID!
+	$includeParentId: Boolean!
+	$includeChildrenIds: Boolean!
+	$includeAncestorIds: Boolean!
+) {
 	node(id: $id) {
 		... on TaxonomyCategory {
 			${TAXONOMY_CATEGORY_FIELDS}
@@ -50,7 +58,14 @@ query TaxonomyCategoryGet($id: ID!) {
 `;
 
 export const TAXONOMY_CATEGORY_ATTRIBUTES_QUERY = `
-query TaxonomyCategoryAttributes($id: ID!, $first: Int!, $valuesFirst: Int!) {
+query TaxonomyCategoryAttributes(
+	$id: ID!
+	$first: Int!
+	$valuesFirst: Int!
+	$includeParentId: Boolean!
+	$includeChildrenIds: Boolean!
+	$includeAncestorIds: Boolean!
+) {
 	node(id: $id) {
 		... on TaxonomyCategory {
 			${TAXONOMY_CATEGORY_FIELDS}

@@ -3,6 +3,7 @@ import {
 	gidField,
 	paginationFields,
 	readMetafieldsFields,
+	returnFieldsField,
 	TAGS_FIELD,
 	templateSuffixTextField,
 } from './common';
@@ -16,6 +17,29 @@ const ARTICLE_SORT_OPTIONS = [
 	{ name: 'Title', value: 'TITLE' },
 	{ name: 'Updated At', value: 'UPDATED_AT' },
 ];
+
+const ARTICLE_RETURN_FIELD_OPTIONS = [
+	{ name: 'Author', value: 'author' },
+	{ name: 'Blog', value: 'blog' },
+	{ name: 'Body', value: 'body' },
+	{ name: 'Image', value: 'image' },
+	{ name: 'Published Status', value: 'published' },
+	{ name: 'Summary', value: 'summary' },
+	{ name: 'Tags', value: 'tags' },
+	{ name: 'Template Suffix', value: 'templateSuffix' },
+];
+
+const ARTICLE_GET_DEFAULT_RETURN_FIELDS = [
+	'author',
+	'blog',
+	'body',
+	'image',
+	'published',
+	'summary',
+	'tags',
+	'templateSuffix',
+];
+const ARTICLE_GET_MANY_DEFAULT_RETURN_FIELDS = ['author', 'blog', 'image', 'published'];
 
 function articleAuthorFields(required: boolean): INodeProperties[] {
 	return [
@@ -167,6 +191,7 @@ export const ARTICLE_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		registryKey: 'article.get',
 		fields: [
 			gidField('articleId', 'Article ID', 'Global article ID in Shopify'),
+			returnFieldsField(ARTICLE_RETURN_FIELD_OPTIONS, ARTICLE_GET_DEFAULT_RETURN_FIELDS),
 			...readMetafieldsFields(),
 		],
 	},
@@ -176,7 +201,10 @@ export const ARTICLE_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many articles',
 		registryKey: 'article.getMany',
-		fields: paginationFields(ARTICLE_SORT_OPTIONS),
+		fields: [
+			...paginationFields(ARTICLE_SORT_OPTIONS),
+			returnFieldsField(ARTICLE_RETURN_FIELD_OPTIONS, ARTICLE_GET_MANY_DEFAULT_RETURN_FIELDS),
+		],
 	},
 	{
 		resource: 'article',

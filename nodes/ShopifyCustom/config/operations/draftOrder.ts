@@ -1,5 +1,11 @@
 import type { INodeProperties } from 'n8n-workflow';
-import { gidField, paginationFields, readMetafieldsFields, TAGS_FIELD } from './common';
+import {
+	gidField,
+	paginationFields,
+	readMetafieldsFields,
+	returnFieldsField,
+	TAGS_FIELD,
+} from './common';
 import type { IShopifyOperationConfig } from './types';
 
 const DRAFT_ORDER_SORT_OPTIONS = [
@@ -7,6 +13,11 @@ const DRAFT_ORDER_SORT_OPTIONS = [
 	{ name: 'Created At', value: 'CREATED_AT' },
 	{ name: 'Updated At', value: 'UPDATED_AT' },
 	{ name: 'Number', value: 'NUMBER' },
+];
+
+const DRAFT_ORDER_RETURN_FIELD_OPTIONS = [
+	{ name: 'Note', value: 'note' },
+	{ name: 'Tags', value: 'tags' },
 ];
 
 const draftLineItemsField: INodeProperties = {
@@ -85,6 +96,7 @@ export const DRAFT_ORDER_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		registryKey: 'draftOrder.get',
 		fields: [
 			gidField('draftOrderId', 'Draft Order ID', 'Global draft order ID in Shopify'),
+			returnFieldsField(DRAFT_ORDER_RETURN_FIELD_OPTIONS, ['note', 'tags']),
 			...readMetafieldsFields(),
 		],
 	},
@@ -94,7 +106,10 @@ export const DRAFT_ORDER_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many draft orders',
 		registryKey: 'draftOrder.getMany',
-		fields: paginationFields(DRAFT_ORDER_SORT_OPTIONS),
+		fields: [
+			...paginationFields(DRAFT_ORDER_SORT_OPTIONS),
+			returnFieldsField(DRAFT_ORDER_RETURN_FIELD_OPTIONS),
+		],
 	},
 	{
 		resource: 'draftOrder',

@@ -1,4 +1,5 @@
 import type { INodeProperties } from 'n8n-workflow';
+import { returnFieldsField } from './common';
 import type { IShopifyOperationConfig } from './types';
 
 const FILE_SORT_OPTIONS = [
@@ -29,6 +30,14 @@ const FILE_CREATE_CONTENT_TYPE_OPTIONS = [
 	{ name: 'Image', value: 'IMAGE' },
 	{ name: 'Video', value: 'VIDEO' },
 ];
+
+const FILE_RETURN_FIELD_OPTIONS = [
+	{ name: 'Generic File Details', value: 'genericFileDetails' },
+	{ name: 'Image Details', value: 'imageDetails' },
+	{ name: 'Preview', value: 'preview' },
+];
+
+const FILE_DEFAULT_RETURN_FIELDS = ['genericFileDetails', 'imageDetails', 'preview'];
 
 function createFields(): INodeProperties[] {
 	return [
@@ -371,7 +380,10 @@ export const FILE_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get files and media assets',
 		registryKey: 'file.getMany',
-		fields: getManyFields(),
+		fields: [
+			...getManyFields(),
+			returnFieldsField(FILE_RETURN_FIELD_OPTIONS, FILE_DEFAULT_RETURN_FIELDS),
+		],
 	},
 	{
 		resource: 'file',
@@ -395,6 +407,9 @@ export const FILE_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Delete Unused Images',
 		description: 'Find and optionally delete images that are not used anywhere',
 		registryKey: 'file.deleteUnusedImages',
-		fields: deleteUnusedImagesFields(),
+		fields: [
+			...deleteUnusedImagesFields(),
+			returnFieldsField(FILE_RETURN_FIELD_OPTIONS, FILE_DEFAULT_RETURN_FIELDS),
+		],
 	},
 ];

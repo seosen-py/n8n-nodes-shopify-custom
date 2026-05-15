@@ -1,3 +1,5 @@
+/* eslint-disable n8n-nodes-base/node-param-default-wrong-for-multi-options */
+
 import type { INodeProperties } from 'n8n-workflow';
 import { gidField, paginationFields, readMetafieldsFields } from './common';
 import type { IShopifyOperationConfig } from './types';
@@ -10,18 +12,26 @@ const PRODUCT_VARIANT_SORT_OPTIONS = [
 	{ name: 'Inventory Quantity', value: 'INVENTORY_QUANTITY' },
 ];
 
-function productVariantAdditionalFields(): INodeProperties[] {
+function productVariantAdditionalFields(defaultFields: string[] = []): INodeProperties[] {
 	return [
 		{
 			displayName: 'Additional Fields',
 			name: 'additionalFields',
 			type: 'multiOptions',
-			default: [],
+			default: defaultFields,
 			description: 'Additional Product Variant fields to include in the response',
 			options: [
 				{
 					name: 'Available For Sale',
 					value: 'availableForSale',
+				},
+				{
+					name: 'Barcode',
+					value: 'barcode',
+				},
+				{
+					name: 'Compare At Price',
+					value: 'compareAtPrice',
 				},
 				{
 					name: 'Image (Deprecated)',
@@ -44,6 +54,10 @@ function productVariantAdditionalFields(): INodeProperties[] {
 				{
 					name: 'Product Handle',
 					value: 'productHandle',
+				},
+				{
+					name: 'Taxable',
+					value: 'taxable',
 				},
 			],
 		},
@@ -116,7 +130,7 @@ export const PRODUCT_VARIANT_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		fields: [
 			gidField('variantId', 'Variant ID', 'Global variant ID in Shopify'),
 			...readMetafieldsFields(),
-			...productVariantAdditionalFields(),
+			...productVariantAdditionalFields(['barcode', 'compareAtPrice', 'taxable']),
 		],
 	},
 	{

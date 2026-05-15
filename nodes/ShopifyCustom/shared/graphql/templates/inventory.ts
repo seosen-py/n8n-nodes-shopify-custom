@@ -3,6 +3,9 @@ import { USER_ERRORS_FIELDS } from './commonFragments';
 export const INVENTORY_GET_QUERY = `
 query InventoryGet(
 	$id: ID!
+	$includeOrigin: Boolean!
+	$includeUnitCost: Boolean!
+	$includeVariant: Boolean!
 	$includeInventoryLevels: Boolean!
 	$inventoryLevelsFirst: Int!
 	$inventoryQuantityNames: [String!]!
@@ -12,15 +15,15 @@ query InventoryGet(
 		sku
 		tracked
 		requiresShipping
-		countryCodeOfOrigin
-		provinceCodeOfOrigin
-		harmonizedSystemCode
-		unitCost {
+		countryCodeOfOrigin @include(if: $includeOrigin)
+		provinceCodeOfOrigin @include(if: $includeOrigin)
+		harmonizedSystemCode @include(if: $includeOrigin)
+		unitCost @include(if: $includeUnitCost) {
 			amount
 			currencyCode
 		}
 		updatedAt
-		variant {
+		variant @include(if: $includeVariant) {
 			id
 			title
 			product {
@@ -54,6 +57,9 @@ query InventoryGetMany(
 	$after: String
 	$query: String
 	$reverse: Boolean
+	$includeOrigin: Boolean!
+	$includeUnitCost: Boolean!
+	$includeVariant: Boolean!
 	$includeInventoryLevels: Boolean!
 	$inventoryLevelsFirst: Int!
 	$inventoryQuantityNames: [String!]!
@@ -64,8 +70,15 @@ query InventoryGetMany(
 			sku
 			tracked
 			requiresShipping
+			countryCodeOfOrigin @include(if: $includeOrigin)
+			provinceCodeOfOrigin @include(if: $includeOrigin)
+			harmonizedSystemCode @include(if: $includeOrigin)
+			unitCost @include(if: $includeUnitCost) {
+				amount
+				currencyCode
+			}
 			updatedAt
-			variant {
+			variant @include(if: $includeVariant) {
 				id
 				title
 				product {

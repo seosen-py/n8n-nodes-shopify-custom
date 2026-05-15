@@ -77,6 +77,34 @@ function orderReadOptionFields(): INodeProperties[] {
 			default: {},
 			options: [
 				{
+					displayName: 'Detail Groups',
+					name: 'detailGroups',
+					type: 'multiOptions',
+					default: [
+						'customer',
+						'discountApplications',
+						'fulfillments',
+						'lineItems',
+						'refunds',
+						'returns',
+						'risk',
+						'shippingLines',
+						'transactions',
+					],
+					description: 'Additional order field groups to include in the response',
+					options: [
+						{ name: 'Customer', value: 'customer' },
+						{ name: 'Discount Applications', value: 'discountApplications' },
+						{ name: 'Fulfillments', value: 'fulfillments' },
+						{ name: 'Line Items', value: 'lineItems' },
+						{ name: 'Refunds', value: 'refunds' },
+						{ name: 'Returns', value: 'returns' },
+						{ name: 'Risk Assessment', value: 'risk' },
+						{ name: 'Shipping Lines', value: 'shippingLines' },
+						{ name: 'Transactions', value: 'transactions' },
+					],
+				},
+				{
 					displayName: 'Discount Applications Limit',
 					name: 'discountApplicationsLimit',
 					type: 'number',
@@ -87,7 +115,7 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeDiscountApplications: [true],
+							detailGroups: ['discountApplications'],
 						},
 					},
 				},
@@ -102,7 +130,7 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeFulfillments: [true],
+							detailGroups: ['fulfillments'],
 						},
 					},
 				},
@@ -117,72 +145,9 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeFulfillments: [true],
+							detailGroups: ['fulfillments'],
 						},
 					},
-				},
-				{
-					displayName: 'Include Customer',
-					name: 'includeCustomer',
-					type: 'boolean',
-					default: true,
-					description: 'Whether to include the related customer object',
-				},
-				{
-					displayName: 'Include Discount Applications',
-					name: 'includeDiscountApplications',
-					type: 'boolean',
-					default: true,
-					description: 'Whether to include order-level discount applications',
-				},
-				{
-					displayName: 'Include Fulfillments',
-					name: 'includeFulfillments',
-					type: 'boolean',
-					default: true,
-					description: 'Whether to include fulfillments, tracking, fulfillment service, and location details',
-				},
-				{
-					displayName: 'Include Line Items',
-					name: 'includeLineItems',
-					type: 'boolean',
-					default: true,
-					description: 'Whether to include order line items with pricing, tax, product, and variant details',
-				},
-				{
-					displayName: 'Include Refunds',
-					name: 'includeRefunds',
-					type: 'boolean',
-					default: true,
-					description: 'Whether to include refunds and refund line items',
-				},
-				{
-					displayName: 'Include Returns',
-					name: 'includeReturns',
-					type: 'boolean',
-					default: true,
-					description: 'Whether to include returns and return line items',
-				},
-				{
-					displayName: 'Include Risk Assessment',
-					name: 'includeRisk',
-					type: 'boolean',
-					default: true,
-					description: 'Whether to include Shopify order risk assessment data',
-				},
-				{
-					displayName: 'Include Shipping Lines',
-					name: 'includeShippingLines',
-					type: 'boolean',
-					default: true,
-					description: 'Whether to include shipping lines and their taxes',
-				},
-				{
-					displayName: 'Include Transactions',
-					name: 'includeTransactions',
-					type: 'boolean',
-					default: true,
-					description: 'Whether to include order transactions',
 				},
 				{
 					displayName: 'Line Items Limit',
@@ -195,7 +160,7 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeLineItems: [true],
+							detailGroups: ['lineItems'],
 						},
 					},
 				},
@@ -210,7 +175,7 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeRefunds: [true],
+							detailGroups: ['refunds'],
 						},
 					},
 				},
@@ -225,7 +190,7 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeRefunds: [true],
+							detailGroups: ['refunds'],
 						},
 					},
 				},
@@ -240,7 +205,7 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeReturns: [true],
+							detailGroups: ['returns'],
 						},
 					},
 				},
@@ -255,7 +220,7 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeReturns: [true],
+							detailGroups: ['returns'],
 						},
 					},
 				},
@@ -270,7 +235,7 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeShippingLines: [true],
+							detailGroups: ['shippingLines'],
 						},
 					},
 				},
@@ -285,7 +250,7 @@ function orderReadOptionFields(): INodeProperties[] {
 					},
 					displayOptions: {
 						show: {
-							includeTransactions: [true],
+							detailGroups: ['transactions'],
 						},
 					},
 				},

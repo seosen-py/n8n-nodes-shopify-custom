@@ -18,6 +18,8 @@ mutation DraftOrderCreate($input: DraftOrderInput!) {
 export const DRAFT_ORDER_GET_QUERY = `
 query DraftOrderGet(
 	$id: ID!
+	$includeNote: Boolean!
+	$includeTags: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -28,9 +30,9 @@ query DraftOrderGet(
 		id
 		name
 		email
-		note2
+		note2 @include(if: $includeNote)
 		status
-		tags
+		tags @include(if: $includeTags)
 		updatedAt
 		${OPTIONAL_METAFIELDS_CONNECTION}
 	}
@@ -44,6 +46,8 @@ query DraftOrderGetMany(
 	$query: String
 	$sortKey: DraftOrderSortKeys
 	$reverse: Boolean
+	$includeNote: Boolean!
+	$includeTags: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -56,6 +60,8 @@ query DraftOrderGetMany(
 			name
 			email
 			status
+			note2 @include(if: $includeNote)
+			tags @include(if: $includeTags)
 			updatedAt
 			${OPTIONAL_METAFIELDS_CONNECTION}
 		}

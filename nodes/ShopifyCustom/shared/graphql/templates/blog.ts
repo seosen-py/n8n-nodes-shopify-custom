@@ -19,6 +19,10 @@ mutation BlogCreate($blog: BlogCreateInput!) {
 export const BLOG_GET_QUERY = `
 query BlogGet(
 	$id: ID!
+	$includeTemplateSuffix: Boolean!
+	$includeCommentPolicy: Boolean!
+	$includeTags: Boolean!
+	$includeCreatedAt: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -29,10 +33,10 @@ query BlogGet(
 		id
 		title
 		handle
-		templateSuffix
-		commentPolicy
-		tags
-		createdAt
+		templateSuffix @include(if: $includeTemplateSuffix)
+		commentPolicy @include(if: $includeCommentPolicy)
+		tags @include(if: $includeTags)
+		createdAt @include(if: $includeCreatedAt)
 		updatedAt
 		${OPTIONAL_METAFIELDS_CONNECTION}
 	}
@@ -46,6 +50,10 @@ query BlogGetMany(
 	$query: String
 	$sortKey: BlogSortKeys
 	$reverse: Boolean
+	$includeTemplateSuffix: Boolean!
+	$includeCommentPolicy: Boolean!
+	$includeTags: Boolean!
+	$includeCreatedAt: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -57,9 +65,10 @@ query BlogGetMany(
 			id
 			title
 			handle
-			templateSuffix
-			commentPolicy
-			tags
+			templateSuffix @include(if: $includeTemplateSuffix)
+			commentPolicy @include(if: $includeCommentPolicy)
+			tags @include(if: $includeTags)
+			createdAt @include(if: $includeCreatedAt)
 			updatedAt
 			${OPTIONAL_METAFIELDS_CONNECTION}
 		}

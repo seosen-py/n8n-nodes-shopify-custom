@@ -3,6 +3,7 @@ import {
 	gidField,
 	paginationFields,
 	readMetafieldsFields,
+	returnFieldsField,
 	templateSuffixTextField,
 } from './common';
 import type { IShopifyOperationConfig } from './types';
@@ -18,6 +19,16 @@ const COMMENT_POLICY_OPTIONS = [
 	{ name: 'Closed', value: 'CLOSED' },
 	{ name: 'Moderated', value: 'MODERATED' },
 ];
+
+const BLOG_RETURN_FIELD_OPTIONS = [
+	{ name: 'Comment Policy', value: 'commentPolicy' },
+	{ name: 'Created At', value: 'createdAt' },
+	{ name: 'Tags', value: 'tags' },
+	{ name: 'Template Suffix', value: 'templateSuffix' },
+];
+
+const BLOG_GET_DEFAULT_RETURN_FIELDS = ['commentPolicy', 'createdAt', 'tags', 'templateSuffix'];
+const BLOG_GET_MANY_DEFAULT_RETURN_FIELDS = ['commentPolicy', 'tags', 'templateSuffix'];
 
 function blogBaseFields(requiredTitle: boolean): INodeProperties[] {
 	return [
@@ -74,6 +85,7 @@ export const BLOG_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		registryKey: 'blog.get',
 		fields: [
 			gidField('blogId', 'Blog ID', 'Global blog ID in Shopify'),
+			returnFieldsField(BLOG_RETURN_FIELD_OPTIONS, BLOG_GET_DEFAULT_RETURN_FIELDS),
 			...readMetafieldsFields(),
 		],
 	},
@@ -83,7 +95,10 @@ export const BLOG_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many blogs',
 		registryKey: 'blog.getMany',
-		fields: paginationFields(BLOG_SORT_OPTIONS),
+		fields: [
+			...paginationFields(BLOG_SORT_OPTIONS),
+			returnFieldsField(BLOG_RETURN_FIELD_OPTIONS, BLOG_GET_MANY_DEFAULT_RETURN_FIELDS),
+		],
 	},
 	{
 		resource: 'blog',

@@ -18,15 +18,15 @@ const METAOBJECT_FIELDS = `
 	handle
 	displayName
 	updatedAt
-	fields {
+	fields @include(if: $includeFields) {
 		key
 		type
 		value
 		jsonValue
-		reference {
+		reference @include(if: $includeFieldReferences) {
 			${METAOBJECT_REFERENCE_FIELDS}
 		}
-		references(first: 50) {
+		references(first: 50) @include(if: $includeFieldReferences) {
 			nodes {
 				${METAOBJECT_REFERENCE_FIELDS}
 			}
@@ -35,7 +35,7 @@ const METAOBJECT_FIELDS = `
 `;
 
 export const METAOBJECT_GET_QUERY = `
-query MetaobjectGet($id: ID!) {
+query MetaobjectGet($id: ID!, $includeFields: Boolean!, $includeFieldReferences: Boolean!) {
 	metaobject(id: $id) {
 		${METAOBJECT_FIELDS}
 	}
@@ -50,6 +50,8 @@ query MetaobjectGetMany(
 	$query: String
 	$sortKey: String
 	$reverse: Boolean
+	$includeFields: Boolean!
+	$includeFieldReferences: Boolean!
 ) {
 	metaobjects(type: $type, first: $first, after: $after, query: $query, sortKey: $sortKey, reverse: $reverse) {
 		nodes {
@@ -64,7 +66,11 @@ query MetaobjectGetMany(
 `;
 
 export const METAOBJECT_CREATE_MUTATION = `
-mutation MetaobjectCreate($metaobject: MetaobjectCreateInput!) {
+mutation MetaobjectCreate(
+	$metaobject: MetaobjectCreateInput!
+	$includeFields: Boolean!
+	$includeFieldReferences: Boolean!
+) {
 	metaobjectCreate(metaobject: $metaobject) {
 		metaobject {
 			${METAOBJECT_FIELDS}
@@ -75,7 +81,12 @@ mutation MetaobjectCreate($metaobject: MetaobjectCreateInput!) {
 `;
 
 export const METAOBJECT_UPDATE_MUTATION = `
-mutation MetaobjectUpdate($id: ID!, $metaobject: MetaobjectUpdateInput!) {
+mutation MetaobjectUpdate(
+	$id: ID!
+	$metaobject: MetaobjectUpdateInput!
+	$includeFields: Boolean!
+	$includeFieldReferences: Boolean!
+) {
 	metaobjectUpdate(id: $id, metaobject: $metaobject) {
 		metaobject {
 			${METAOBJECT_FIELDS}
@@ -93,4 +104,3 @@ mutation MetaobjectDelete($id: ID!) {
 	}
 }
 `;
-

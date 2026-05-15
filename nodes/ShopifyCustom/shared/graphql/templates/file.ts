@@ -7,7 +7,7 @@ const FILE_NODE_FIELDS = `
 	createdAt
 	updatedAt
 	fileStatus
-	preview {
+	preview @include(if: $includePreview) {
 		status
 		image {
 			url
@@ -15,12 +15,12 @@ const FILE_NODE_FIELDS = `
 			height
 		}
 	}
-	... on GenericFile {
+	... on GenericFile @include(if: $includeGenericFileDetails) {
 		url
 		mimeType
 		originalFileSize
 	}
-	... on MediaImage {
+	... on MediaImage @include(if: $includeImageDetails) {
 		mimeType
 		image {
 			url
@@ -37,6 +37,9 @@ query FileGetMany(
 	$query: String
 	$sortKey: FileSortKeys
 	$reverse: Boolean
+	$includePreview: Boolean!
+	$includeGenericFileDetails: Boolean!
+	$includeImageDetails: Boolean!
 ) {
 	files(first: $first, after: $after, query: $query, sortKey: $sortKey, reverse: $reverse) {
 		nodes {
@@ -51,7 +54,12 @@ query FileGetMany(
 `;
 
 export const FILE_CREATE_MUTATION = `
-mutation FileCreate($files: [FileCreateInput!]!) {
+mutation FileCreate(
+	$files: [FileCreateInput!]!
+	$includePreview: Boolean!
+	$includeGenericFileDetails: Boolean!
+	$includeImageDetails: Boolean!
+) {
 	fileCreate(files: $files) {
 		files {
 			${FILE_NODE_FIELDS}
@@ -78,7 +86,12 @@ mutation StagedUploadsCreate($input: [StagedUploadInput!]!) {
 `;
 
 export const FILE_UPDATE_MUTATION = `
-mutation FileUpdate($files: [FileUpdateInput!]!) {
+mutation FileUpdate(
+	$files: [FileUpdateInput!]!
+	$includePreview: Boolean!
+	$includeGenericFileDetails: Boolean!
+	$includeImageDetails: Boolean!
+) {
 	fileUpdate(files: $files) {
 		files {
 			${FILE_NODE_FIELDS}

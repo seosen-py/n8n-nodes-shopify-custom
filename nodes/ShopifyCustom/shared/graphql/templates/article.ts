@@ -30,6 +30,14 @@ mutation ArticleCreate($article: ArticleCreateInput!) {
 export const ARTICLE_GET_QUERY = `
 query ArticleGet(
 	$id: ID!
+	$includeImage: Boolean!
+	$includeBody: Boolean!
+	$includeSummary: Boolean!
+	$includeTags: Boolean!
+	$includeTemplateSuffix: Boolean!
+	$includePublished: Boolean!
+	$includeBlog: Boolean!
+	$includeAuthor: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -40,23 +48,23 @@ query ArticleGet(
 		id
 		title
 		handle
-		image {
+		image @include(if: $includeImage) {
 			altText
 			url
 		}
-		body
-		summary
-		tags
-		templateSuffix
-		isPublished
-		publishedAt
+		body @include(if: $includeBody)
+		summary @include(if: $includeSummary)
+		tags @include(if: $includeTags)
+		templateSuffix @include(if: $includeTemplateSuffix)
+		isPublished @include(if: $includePublished)
+		publishedAt @include(if: $includePublished)
 		createdAt
 		updatedAt
-		blog {
+		blog @include(if: $includeBlog) {
 			id
 			title
 		}
-		author {
+		author @include(if: $includeAuthor) {
 			name
 		}
 		${OPTIONAL_METAFIELDS_CONNECTION}
@@ -71,6 +79,14 @@ query ArticleGetMany(
 	$query: String
 	$sortKey: ArticleSortKeys
 	$reverse: Boolean
+	$includeImage: Boolean!
+	$includeBody: Boolean!
+	$includeSummary: Boolean!
+	$includeTags: Boolean!
+	$includeTemplateSuffix: Boolean!
+	$includePublished: Boolean!
+	$includeBlog: Boolean!
+	$includeAuthor: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -82,17 +98,21 @@ query ArticleGetMany(
 			id
 			title
 			handle
-			image {
+			image @include(if: $includeImage) {
 				altText
 				url
 			}
-			isPublished
-			publishedAt
-			blog {
+			body @include(if: $includeBody)
+			summary @include(if: $includeSummary)
+			tags @include(if: $includeTags)
+			templateSuffix @include(if: $includeTemplateSuffix)
+			isPublished @include(if: $includePublished)
+			publishedAt @include(if: $includePublished)
+			blog @include(if: $includeBlog) {
 				id
 				title
 			}
-			author {
+			author @include(if: $includeAuthor) {
 				name
 			}
 			updatedAt

@@ -32,22 +32,25 @@ query ProductVariantGet(
 	$resolveMetafieldReferences: Boolean!
 	$metafieldReferencesFirst: Int!
 	$includeAvailableForSale: Boolean!
+	$includeBarcode: Boolean!
+	$includeCompareAtPrice: Boolean!
 	$includeInventoryItem: Boolean!
 	$includeInventoryQuantity: Boolean!
 	$includeProductHandle: Boolean!
 	$includeImage: Boolean!
 	$includeMedia: Boolean!
+	$includeTaxable: Boolean!
 ) {
 	productVariant(id: $id) {
 		id
 		title
 		sku
-		barcode
 		price
-		compareAtPrice
-		taxable
 		updatedAt
 		availableForSale @include(if: $includeAvailableForSale)
+		barcode @include(if: $includeBarcode)
+		compareAtPrice @include(if: $includeCompareAtPrice)
+		taxable @include(if: $includeTaxable)
 		inventoryItem @include(if: $includeInventoryItem) {
 			id
 			sku
@@ -95,11 +98,14 @@ query ProductVariantGetMany(
 	$resolveMetafieldReferences: Boolean!
 	$metafieldReferencesFirst: Int!
 	$includeAvailableForSale: Boolean!
+	$includeBarcode: Boolean!
+	$includeCompareAtPrice: Boolean!
 	$includeInventoryItem: Boolean!
 	$includeInventoryQuantity: Boolean!
 	$includeProductHandle: Boolean!
 	$includeImage: Boolean!
 	$includeMedia: Boolean!
+	$includeTaxable: Boolean!
 ) {
 	productVariants(first: $first, after: $after, query: $query, sortKey: $sortKey, reverse: $reverse) {
 		nodes {
@@ -109,6 +115,9 @@ query ProductVariantGetMany(
 			price
 			updatedAt
 			availableForSale @include(if: $includeAvailableForSale)
+			barcode @include(if: $includeBarcode)
+			compareAtPrice @include(if: $includeCompareAtPrice)
+			taxable @include(if: $includeTaxable)
 			inventoryItem @include(if: $includeInventoryItem) {
 				id
 				sku

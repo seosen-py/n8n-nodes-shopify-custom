@@ -47,6 +47,16 @@ mutation ProductCreate($product: ProductCreateInput!) {
 export const PRODUCT_GET_QUERY = `
 query ProductGet(
 	$id: ID!
+	$includeDescriptionHtml: Boolean!
+	$includeVendor: Boolean!
+	$includeProductType: Boolean!
+	$includeTags: Boolean!
+	$includeCategory: Boolean!
+	$includeSeo: Boolean!
+	$includeVariants: Boolean!
+	$variantsFirst: Int!
+	$includeVariantInventoryItem: Boolean!
+	$includeVariantInventoryQuantity: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -58,15 +68,31 @@ query ProductGet(
 		title
 		handle
 		status
-		descriptionHtml
-		vendor
-		productType
-		tags
-		category {
+		descriptionHtml @include(if: $includeDescriptionHtml)
+		vendor @include(if: $includeVendor)
+		productType @include(if: $includeProductType)
+		tags @include(if: $includeTags)
+		category @include(if: $includeCategory) {
 			${PRODUCT_CATEGORY_FIELDS}
 		}
-		seo {
+		seo @include(if: $includeSeo) {
 			${SEO_FIELDS}
+		}
+		variants(first: $variantsFirst) @include(if: $includeVariants) {
+			nodes {
+				id
+				title
+				sku
+				price
+				compareAtPrice
+				inventoryQuantity @include(if: $includeVariantInventoryQuantity)
+				inventoryItem @include(if: $includeVariantInventoryItem) {
+					id
+					sku
+					tracked
+					requiresShipping
+				}
+			}
 		}
 		updatedAt
 		${OPTIONAL_METAFIELDS_CONNECTION}
@@ -81,6 +107,16 @@ query ProductGetMany(
 	$query: String
 	$sortKey: ProductSortKeys
 	$reverse: Boolean
+	$includeDescriptionHtml: Boolean!
+	$includeVendor: Boolean!
+	$includeProductType: Boolean!
+	$includeTags: Boolean!
+	$includeCategory: Boolean!
+	$includeSeo: Boolean!
+	$includeVariants: Boolean!
+	$variantsFirst: Int!
+	$includeVariantInventoryItem: Boolean!
+	$includeVariantInventoryQuantity: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -93,13 +129,31 @@ query ProductGetMany(
 			title
 			handle
 			status
-			vendor
-			productType
-			category {
+			descriptionHtml @include(if: $includeDescriptionHtml)
+			vendor @include(if: $includeVendor)
+			productType @include(if: $includeProductType)
+			tags @include(if: $includeTags)
+			category @include(if: $includeCategory) {
 				${PRODUCT_CATEGORY_FIELDS}
 			}
-			seo {
+			seo @include(if: $includeSeo) {
 				${SEO_FIELDS}
+			}
+			variants(first: $variantsFirst) @include(if: $includeVariants) {
+				nodes {
+					id
+					title
+					sku
+					price
+					compareAtPrice
+					inventoryQuantity @include(if: $includeVariantInventoryQuantity)
+					inventoryItem @include(if: $includeVariantInventoryItem) {
+						id
+						sku
+						tracked
+						requiresShipping
+					}
+				}
 			}
 			updatedAt
 			${OPTIONAL_METAFIELDS_CONNECTION}

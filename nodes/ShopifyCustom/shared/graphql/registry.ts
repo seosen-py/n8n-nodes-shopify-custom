@@ -156,16 +156,176 @@ function asStringArray(value: unknown): string[] {
 		.filter((item): item is string => !!item);
 }
 
+function getSelectedReturnFields(parameters: IDataObject, defaultFields: string[] = []): Set<string> {
+	if (!Object.prototype.hasOwnProperty.call(parameters, 'returnFields')) {
+		return new Set(defaultFields);
+	}
+
+	return new Set(asStringArray(parameters.returnFields));
+}
+
+function getProductReturnVariables(parameters: IDataObject): IDataObject {
+	const selectedFields = getSelectedReturnFields(parameters, [
+		'category',
+		'descriptionHtml',
+		'productType',
+		'seo',
+		'tags',
+		'vendor',
+	]);
+	const includeVariantInventoryItem = selectedFields.has('variantInventoryItem');
+	const includeVariantInventoryQuantity = selectedFields.has('variantInventoryQuantity');
+
+	return {
+		includeDescriptionHtml: selectedFields.has('descriptionHtml'),
+		includeVendor: selectedFields.has('vendor'),
+		includeProductType: selectedFields.has('productType'),
+		includeTags: selectedFields.has('tags'),
+		includeCategory: selectedFields.has('category'),
+		includeSeo: selectedFields.has('seo'),
+		includeVariants:
+			selectedFields.has('variants') ||
+			includeVariantInventoryItem ||
+			includeVariantInventoryQuantity,
+		variantsFirst: clampConnectionLimit(parameters.variantsLimit, 50),
+		includeVariantInventoryItem,
+		includeVariantInventoryQuantity,
+	};
+}
+
+function getCollectionReturnVariables(parameters: IDataObject): IDataObject {
+	const selectedFields = getSelectedReturnFields(parameters, [
+		'descriptionHtml',
+		'seo',
+		'templateSuffix',
+	]);
+
+	return {
+		includeDescriptionHtml: selectedFields.has('descriptionHtml'),
+		includeTemplateSuffix: selectedFields.has('templateSuffix'),
+		includeSeo: selectedFields.has('seo'),
+		includeProductsCount:
+			selectedFields.has('productsCount') || Boolean(parameters.includeProductsCount),
+	};
+}
+
+function getCustomerReturnVariables(
+	parameters: IDataObject,
+	defaultFields: string[] = ['note', 'phone', 'tags', 'taxExempt'],
+): IDataObject {
+	const selectedFields = getSelectedReturnFields(parameters, defaultFields);
+
+	return {
+		includePhone: selectedFields.has('phone'),
+		includeNote: selectedFields.has('note'),
+		includeTaxExempt: selectedFields.has('taxExempt'),
+		includeTags: selectedFields.has('tags'),
+	};
+}
+
+function getDraftOrderReturnVariables(
+	parameters: IDataObject,
+	defaultFields: string[] = ['note', 'tags'],
+): IDataObject {
+	const selectedFields = getSelectedReturnFields(parameters, defaultFields);
+
+	return {
+		includeNote: selectedFields.has('note'),
+		includeTags: selectedFields.has('tags'),
+	};
+}
+
+function getArticleReturnVariables(
+	parameters: IDataObject,
+	defaultFields: string[] = [
+		'author',
+		'blog',
+		'body',
+		'image',
+		'published',
+		'summary',
+		'tags',
+		'templateSuffix',
+	],
+): IDataObject {
+	const selectedFields = getSelectedReturnFields(parameters, defaultFields);
+
+	return {
+		includeImage: selectedFields.has('image'),
+		includeBody: selectedFields.has('body'),
+		includeSummary: selectedFields.has('summary'),
+		includeTags: selectedFields.has('tags'),
+		includeTemplateSuffix: selectedFields.has('templateSuffix'),
+		includePublished: selectedFields.has('published'),
+		includeBlog: selectedFields.has('blog'),
+		includeAuthor: selectedFields.has('author'),
+	};
+}
+
+function getBlogReturnVariables(
+	parameters: IDataObject,
+	defaultFields: string[] = ['commentPolicy', 'createdAt', 'tags', 'templateSuffix'],
+): IDataObject {
+	const selectedFields = getSelectedReturnFields(parameters, defaultFields);
+
+	return {
+		includeTemplateSuffix: selectedFields.has('templateSuffix'),
+		includeCommentPolicy: selectedFields.has('commentPolicy'),
+		includeTags: selectedFields.has('tags'),
+		includeCreatedAt: selectedFields.has('createdAt'),
+	};
+}
+
+function getMetaobjectReturnVariables(parameters: IDataObject): IDataObject {
+	const selectedFields = getSelectedReturnFields(parameters, ['fields', 'fieldReferences']);
+
+	return {
+		includeFields: selectedFields.has('fields') || selectedFields.has('fieldReferences'),
+		includeFieldReferences: selectedFields.has('fieldReferences'),
+	};
+}
+
+function getFileReturnVariables(parameters: IDataObject): IDataObject {
+	const selectedFields = getSelectedReturnFields(parameters, [
+		'genericFileDetails',
+		'imageDetails',
+		'preview',
+	]);
+
+	return {
+		includePreview: selectedFields.has('preview'),
+		includeGenericFileDetails: selectedFields.has('genericFileDetails'),
+		includeImageDetails: selectedFields.has('imageDetails'),
+	};
+}
+
+function getTaxonomyReturnVariables(parameters: IDataObject): IDataObject {
+	const selectedFields = getSelectedReturnFields(parameters, [
+		'ancestorIds',
+		'childrenIds',
+		'parentId',
+	]);
+
+	return {
+		includeParentId: selectedFields.has('parentId'),
+		includeChildrenIds: selectedFields.has('childrenIds'),
+		includeAncestorIds: selectedFields.has('ancestorIds'),
+	};
+}
+
 function getProductVariantReadVariables(parameters: IDataObject): IDataObject {
 	const additionalFields = new Set(asStringArray(parameters.additionalFields));
 
 	return {
 		includeAvailableForSale: additionalFields.has('availableForSale'),
+		includeBarcode: additionalFields.has('barcode'),
+		includeCompareAtPrice: additionalFields.has('compareAtPrice'),
 		includeImage: additionalFields.has('image'),
 		includeInventoryItem: additionalFields.has('inventoryItem'),
 		includeInventoryQuantity: additionalFields.has('inventoryQuantity'),
 		includeMedia: additionalFields.has('media'),
 		includeProductHandle: additionalFields.has('productHandle'),
+		includeTaxable: additionalFields.has('taxable'),
 	};
 }
 
@@ -330,27 +490,35 @@ function clampConnectionLimit(value: unknown, fallback: number): number {
 
 function getOrderReadVariables(parameters: IDataObject): IDataObject {
 	const options = isObject(parameters.orderReadOptions) ? parameters.orderReadOptions : {};
+	const detailGroups = Object.prototype.hasOwnProperty.call(options, 'detailGroups')
+		? new Set(asStringArray(options.detailGroups))
+		: undefined;
+	const hasDetailGroup = (name: string, legacyFlag: unknown): boolean =>
+		detailGroups ? detailGroups.has(name) : (asBoolean(legacyFlag) ?? true);
 
 	return {
-		includeCustomer: asBoolean(options.includeCustomer) ?? true,
-		includeLineItems: asBoolean(options.includeLineItems) ?? true,
+		includeCustomer: hasDetailGroup('customer', options.includeCustomer),
+		includeLineItems: hasDetailGroup('lineItems', options.includeLineItems),
 		lineItemsFirst: clampConnectionLimit(options.lineItemsLimit, 100),
-		includeShippingLines: asBoolean(options.includeShippingLines) ?? true,
+		includeShippingLines: hasDetailGroup('shippingLines', options.includeShippingLines),
 		shippingLinesFirst: clampConnectionLimit(options.shippingLinesLimit, 50),
-		includeDiscountApplications: asBoolean(options.includeDiscountApplications) ?? true,
+		includeDiscountApplications: hasDetailGroup(
+			'discountApplications',
+			options.includeDiscountApplications,
+		),
 		discountApplicationsFirst: clampConnectionLimit(options.discountApplicationsLimit, 50),
-		includeFulfillments: asBoolean(options.includeFulfillments) ?? true,
+		includeFulfillments: hasDetailGroup('fulfillments', options.includeFulfillments),
 		fulfillmentsFirst: clampConnectionLimit(options.fulfillmentsLimit, 25),
 		fulfillmentLineItemsFirst: clampConnectionLimit(options.fulfillmentLineItemsLimit, 50),
-		includeTransactions: asBoolean(options.includeTransactions) ?? true,
+		includeTransactions: hasDetailGroup('transactions', options.includeTransactions),
 		transactionsFirst: clampConnectionLimit(options.transactionsLimit, 50),
-		includeRefunds: asBoolean(options.includeRefunds) ?? true,
+		includeRefunds: hasDetailGroup('refunds', options.includeRefunds),
 		refundsFirst: clampConnectionLimit(options.refundsLimit, 50),
 		refundLineItemsFirst: clampConnectionLimit(options.refundLineItemsLimit, 50),
-		includeReturns: asBoolean(options.includeReturns) ?? true,
+		includeReturns: hasDetailGroup('returns', options.includeReturns),
 		returnsFirst: clampConnectionLimit(options.returnsLimit, 50),
 		returnLineItemsFirst: clampConnectionLimit(options.returnLineItemsLimit, 50),
-		includeRisk: asBoolean(options.includeRisk) ?? true,
+		includeRisk: hasDetailGroup('risk', options.includeRisk),
 	};
 }
 
@@ -989,6 +1157,22 @@ function getInventoryReadOptions(parameters: IDataObject): IDataObject {
 	return {};
 }
 
+function getInventoryReturnVariables(
+	parameters: IDataObject,
+	defaultFields: string[] = ['origin', 'unitCost', 'variant'],
+): IDataObject {
+	const options = getInventoryReadOptions(parameters);
+	const selectedFields = getSelectedReturnFields(parameters, defaultFields);
+
+	return {
+		includeOrigin: selectedFields.has('origin'),
+		includeUnitCost: selectedFields.has('unitCost'),
+		includeVariant: selectedFields.has('variant'),
+		includeInventoryLevels:
+			selectedFields.has('inventoryLevels') || Boolean(options.includeInventoryLevels),
+	};
+}
+
 function getInventorySetOptions(parameters: IDataObject): IDataObject {
 	if (isObject(parameters.inventorySetOptions)) {
 		return parameters.inventorySetOptions;
@@ -1161,6 +1345,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: PRODUCT_GET_QUERY,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.productId),
+			...getProductReturnVariables(parameters),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['product']),
@@ -1169,6 +1354,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: PRODUCT_GET_MANY_QUERY,
 		buildVariables: (parameters) => ({
 			...getConnectionVariables(parameters),
+			...getProductReturnVariables(parameters),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['products']),
@@ -1243,6 +1429,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: ARTICLE_GET_QUERY,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.articleId),
+			...getArticleReturnVariables(parameters),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['article']),
@@ -1251,6 +1438,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: ARTICLE_GET_MANY_QUERY,
 		buildVariables: (parameters) => ({
 			...getConnectionVariables(parameters),
+			...getArticleReturnVariables(parameters, ['author', 'blog', 'image', 'published']),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['articles']),
@@ -1311,6 +1499,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: BLOG_GET_QUERY,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.blogId),
+			...getBlogReturnVariables(parameters),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['blog']),
@@ -1319,6 +1508,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: BLOG_GET_MANY_QUERY,
 		buildVariables: (parameters) => ({
 			...getConnectionVariables(parameters),
+			...getBlogReturnVariables(parameters, ['commentPolicy', 'tags', 'templateSuffix']),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['blogs']),
@@ -1455,7 +1645,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: COLLECTION_GET_QUERY,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.collectionId),
-			includeProductsCount: asBoolean(parameters.includeProductsCount),
+			...getCollectionReturnVariables(parameters),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['collection']),
@@ -1464,7 +1654,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: COLLECTION_GET_MANY_QUERY,
 		buildVariables: (parameters) => ({
 			...getConnectionVariables(parameters),
-			includeProductsCount: asBoolean(parameters.includeProductsCount),
+			...getCollectionReturnVariables(parameters),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['collections']),
@@ -1520,6 +1710,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: CUSTOMER_GET_QUERY,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.customerId),
+			...getCustomerReturnVariables(parameters),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['customer']),
@@ -1528,6 +1719,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: CUSTOMER_GET_MANY_QUERY,
 		buildVariables: (parameters) => ({
 			...getConnectionVariables(parameters),
+			...getCustomerReturnVariables(parameters, ['phone']),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['customers']),
@@ -1637,6 +1829,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: DRAFT_ORDER_GET_QUERY,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.draftOrderId),
+			...getDraftOrderReturnVariables(parameters),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['draftOrder']),
@@ -1645,6 +1838,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: DRAFT_ORDER_GET_MANY_QUERY,
 		buildVariables: (parameters) => ({
 			...getConnectionVariables(parameters),
+			...getDraftOrderReturnVariables(parameters, []),
 			...getMetafieldReadVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['draftOrders']),
@@ -1682,7 +1876,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 			const options = getInventoryReadOptions(parameters);
 			return {
 				id: asString(parameters.inventoryItemId),
-				includeInventoryLevels: Boolean(options.includeInventoryLevels),
+				...getInventoryReturnVariables(parameters),
 				inventoryLevelsFirst: Math.max(1, Math.trunc(asNumber(options.inventoryLevelsFirst) ?? 25)),
 				inventoryQuantityNames: parseInventoryQuantityNames(options.inventoryQuantityNames),
 			};
@@ -1700,7 +1894,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 				after: asString(options.afterCursor),
 				query: asString(options.query ?? parameters.query),
 				reverse: asBoolean(options.reverse),
-				includeInventoryLevels: Boolean(options.includeInventoryLevels),
+				...getInventoryReturnVariables(parameters, ['variant']),
 				inventoryLevelsFirst: Math.max(1, Math.trunc(asNumber(options.inventoryLevelsFirst) ?? 25)),
 				inventoryQuantityNames: parseInventoryQuantityNames(options.inventoryQuantityNames),
 			};
@@ -1760,6 +1954,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: FILE_GET_MANY_QUERY,
 		buildVariables: (parameters) => ({
 			...getFileConnectionVariables(parameters),
+			...getFileReturnVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['files']),
 		pagination: {
@@ -1770,6 +1965,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: FILE_CREATE_MUTATION,
 		buildVariables: (parameters) => ({
 			files: parseFileCreateInputs(parameters.fileCreateItems) ?? [],
+			...getFileReturnVariables(parameters),
 		}),
 		mapSimplified: (data) => {
 			const createdFiles = getPathValue(data, ['fileCreate', 'files']);
@@ -1784,6 +1980,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: FILE_UPDATE_MUTATION,
 		buildVariables: (parameters) => ({
 			files: parseFileUpdateInputs(parameters.fileUpdates) ?? [],
+			...getFileReturnVariables(parameters),
 		}),
 		mapSimplified: (data) => {
 			const updatedFiles = getPathValue(data, ['fileUpdate', 'files']);
@@ -1806,6 +2003,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: FILE_GET_MANY_QUERY,
 		buildVariables: (parameters) => ({
 			...getFileConnectionVariables(parameters, 'used_in:none media_type:IMAGE'),
+			...getFileReturnVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['files']),
 		pagination: {
@@ -1919,6 +2117,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		buildVariables: (parameters) =>
 			getTaxonomyCategoryConnectionVariables(parameters, {
 				search: asString(parameters.search),
+				...getTaxonomyReturnVariables(parameters),
 			}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['taxonomy', 'categories']),
 		pagination: {
@@ -1927,7 +2126,8 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 	},
 	'taxonomy.getRootCategories': {
 		document: TAXONOMY_CATEGORIES_QUERY,
-		buildVariables: (parameters) => getTaxonomyCategoryConnectionVariables(parameters),
+		buildVariables: (parameters) =>
+			getTaxonomyCategoryConnectionVariables(parameters, getTaxonomyReturnVariables(parameters)),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['taxonomy', 'categories']),
 		pagination: {
 			connectionPath: ['taxonomy', 'categories'],
@@ -1938,6 +2138,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		buildVariables: (parameters) =>
 			getTaxonomyCategoryConnectionVariables(parameters, {
 				childrenOf: asString(parameters.categoryId),
+				...getTaxonomyReturnVariables(parameters),
 			}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['taxonomy', 'categories']),
 		pagination: {
@@ -1949,6 +2150,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		buildVariables: (parameters) =>
 			getTaxonomyCategoryConnectionVariables(parameters, {
 				descendantsOf: asString(parameters.categoryId),
+				...getTaxonomyReturnVariables(parameters),
 			}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['taxonomy', 'categories']),
 		pagination: {
@@ -1959,6 +2161,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: TAXONOMY_CATEGORY_GET_QUERY,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.categoryId),
+			...getTaxonomyReturnVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['node']),
 	},
@@ -1968,12 +2171,14 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 			id: asString(parameters.categoryId),
 			first: clampConnectionLimit(parameters.attributeLimit, 50),
 			valuesFirst: clampConnectionLimit(parameters.valueLimit, 50),
+			...getTaxonomyReturnVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['node']),
 	},
 	'metaobject.create': {
 		document: METAOBJECT_CREATE_MUTATION,
 		buildVariables: (parameters) => ({
+			...getMetaobjectReturnVariables(parameters),
 			metaobject: {
 				type: asString(parameters.metaobjectType),
 				handle: asString(parameters.handle),
@@ -1987,6 +2192,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: METAOBJECT_GET_QUERY,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.metaobjectId),
+			...getMetaobjectReturnVariables(parameters),
 		}),
 		mapSimplified: (data) => mapSingleNode(data, ['metaobject']),
 	},
@@ -1995,6 +2201,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		buildVariables: (parameters) => ({
 			type: asString(parameters.metaobjectType),
 			...getConnectionVariables(parameters),
+			...getMetaobjectReturnVariables(parameters),
 		}),
 		mapSimplified: (data) => mapNodesFromConnection(data, ['metaobjects']),
 		pagination: {
@@ -2005,6 +2212,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: METAOBJECT_UPDATE_MUTATION,
 		buildVariables: (parameters) => ({
 			id: asString(parameters.metaobjectId),
+			...getMetaobjectReturnVariables(parameters),
 			metaobject: {
 				handle: asString(parameters.handle),
 				fields: parseMetaobjectFieldInputs(parameters.metaobjectFields),

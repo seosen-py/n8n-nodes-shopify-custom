@@ -1,6 +1,14 @@
+/* eslint-disable n8n-nodes-base/node-param-default-wrong-for-multi-options */
+
 import type { INodeProperties } from 'n8n-workflow';
 import type { ShopifyResourceValue } from '../resources';
 import type { ShopifyOperationValue } from './types';
+
+export type ReturnFieldOption = {
+	name: string;
+	value: string;
+	description?: string;
+};
 
 export function operationDisplayOptions(
 	resource: ShopifyResourceValue,
@@ -11,6 +19,44 @@ export function operationDisplayOptions(
 			resource: [resource],
 			operation: [operation],
 		},
+	};
+}
+
+export function returnFieldsField(
+	options: ReturnFieldOption[],
+	defaultFields: string[] = [],
+): INodeProperties {
+	return {
+		displayName: 'Fields to Return',
+		name: 'returnFields',
+		type: 'multiOptions',
+		default: defaultFields,
+		description:
+			'Additional field groups to include in the Shopify response. Core identity fields are always returned.',
+		options,
+	};
+}
+
+export function limitField(
+	displayName: string,
+	name: string,
+	defaultValue: number,
+	showWhen?: NonNullable<INodeProperties['displayOptions']>['show'],
+): INodeProperties {
+	return {
+		displayName,
+		name,
+		type: 'number',
+		default: defaultValue,
+		typeOptions: {
+			minValue: 1,
+			maxValue: 250,
+		},
+		displayOptions: showWhen
+			? {
+					show: showWhen,
+				}
+			: undefined,
 	};
 }
 

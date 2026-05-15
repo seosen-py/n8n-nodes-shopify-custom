@@ -1,5 +1,11 @@
 import type { INodeProperties } from 'n8n-workflow';
-import { gidField, paginationFields, readMetafieldsFields, TAGS_FIELD } from './common';
+import {
+	gidField,
+	paginationFields,
+	readMetafieldsFields,
+	returnFieldsField,
+	TAGS_FIELD,
+} from './common';
 import type { IShopifyOperationConfig } from './types';
 
 const CUSTOMER_SORT_OPTIONS = [
@@ -8,6 +14,16 @@ const CUSTOMER_SORT_OPTIONS = [
 	{ name: 'Last Order Date', value: 'LAST_ORDER_DATE' },
 	{ name: 'Updated At', value: 'UPDATED_AT' },
 ];
+
+const CUSTOMER_RETURN_FIELD_OPTIONS = [
+	{ name: 'Note', value: 'note' },
+	{ name: 'Phone', value: 'phone' },
+	{ name: 'Tags', value: 'tags' },
+	{ name: 'Tax Exempt', value: 'taxExempt' },
+];
+
+const CUSTOMER_GET_DEFAULT_RETURN_FIELDS = ['note', 'phone', 'tags', 'taxExempt'];
+const CUSTOMER_GET_MANY_DEFAULT_RETURN_FIELDS = ['phone'];
 
 function customerBaseFields(isCreate: boolean): INodeProperties[] {
 	return [
@@ -78,7 +94,11 @@ export const CUSTOMER_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get',
 		description: 'Get a customer by ID',
 		registryKey: 'customer.get',
-		fields: [gidField('customerId', 'Customer ID', 'Global customer ID in Shopify'), ...readMetafieldsFields()],
+		fields: [
+			gidField('customerId', 'Customer ID', 'Global customer ID in Shopify'),
+			returnFieldsField(CUSTOMER_RETURN_FIELD_OPTIONS, CUSTOMER_GET_DEFAULT_RETURN_FIELDS),
+			...readMetafieldsFields(),
+		],
 	},
 	{
 		resource: 'customer',
@@ -86,7 +106,10 @@ export const CUSTOMER_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many customers',
 		registryKey: 'customer.getMany',
-		fields: paginationFields(CUSTOMER_SORT_OPTIONS),
+		fields: [
+			...paginationFields(CUSTOMER_SORT_OPTIONS),
+			returnFieldsField(CUSTOMER_RETURN_FIELD_OPTIONS, CUSTOMER_GET_MANY_DEFAULT_RETURN_FIELDS),
+		],
 	},
 	{
 		resource: 'customer',

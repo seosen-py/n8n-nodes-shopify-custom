@@ -5,6 +5,7 @@ import {
 	gidField,
 	paginationFields,
 	readMetafieldsFields,
+	returnFieldsField,
 	seoFields,
 	templateSuffixTextField,
 } from './common';
@@ -26,6 +27,16 @@ const SMART_RULE_MATCH_OPTIONS = [
 	{ name: 'All Rules (AND)', value: 'all' },
 	{ name: 'Any Rule (OR)', value: 'any' },
 ];
+
+const COLLECTION_RETURN_FIELD_OPTIONS = [
+	{ name: 'Description HTML', value: 'descriptionHtml' },
+	{ name: 'Products Count', value: 'productsCount' },
+	{ name: 'SEO', value: 'seo' },
+	{ name: 'Template Suffix', value: 'templateSuffix' },
+];
+
+const COLLECTION_GET_DEFAULT_RETURN_FIELDS = ['descriptionHtml', 'seo', 'templateSuffix'];
+const COLLECTION_GET_MANY_DEFAULT_RETURN_FIELDS = ['seo'];
 
 function escapeRegex(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -74,14 +85,6 @@ function collectionBaseFields(): INodeProperties[] {
 		templateSuffixTextField('collection'),
 	];
 }
-
-const INCLUDE_PRODUCTS_COUNT_FIELD: INodeProperties = {
-	displayName: 'Include Products Count',
-	name: 'includeProductsCount',
-	type: 'boolean',
-	default: false,
-	description: 'Whether to also fetch the number of products assigned to the collection',
-};
 
 function collectionCreateFields(): INodeProperties[] {
 	return [
@@ -294,7 +297,7 @@ export const COLLECTION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		registryKey: 'collection.get',
 		fields: [
 			gidField('collectionId', 'Collection ID', 'Global collection ID in Shopify'),
-			INCLUDE_PRODUCTS_COUNT_FIELD,
+			returnFieldsField(COLLECTION_RETURN_FIELD_OPTIONS, COLLECTION_GET_DEFAULT_RETURN_FIELDS),
 			...readMetafieldsFields(),
 		],
 	},
@@ -304,7 +307,13 @@ export const COLLECTION_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many collections',
 		registryKey: 'collection.getMany',
-		fields: [INCLUDE_PRODUCTS_COUNT_FIELD, ...paginationFields(COLLECTION_SORT_OPTIONS)],
+		fields: [
+			...paginationFields(COLLECTION_SORT_OPTIONS),
+			returnFieldsField(
+				COLLECTION_RETURN_FIELD_OPTIONS,
+				COLLECTION_GET_MANY_DEFAULT_RETURN_FIELDS,
+			),
+		],
 	},
 	{
 		resource: 'collection',

@@ -1,8 +1,10 @@
 import type { INodeProperties } from 'n8n-workflow';
 import {
 	gidField,
+	limitField,
 	paginationFields,
 	readMetafieldsFields,
+	returnFieldsField,
 	seoFields,
 	TAGS_FIELD,
 	templateSuffixTextField,
@@ -15,6 +17,31 @@ const PRODUCT_SORT_OPTIONS = [
 	{ name: 'Title', value: 'TITLE' },
 	{ name: 'Updated At', value: 'UPDATED_AT' },
 	{ name: 'Inventory Total', value: 'INVENTORY_TOTAL' },
+];
+
+const PRODUCT_RETURN_FIELD_OPTIONS = [
+	{ name: 'Category', value: 'category' },
+	{ name: 'Description HTML', value: 'descriptionHtml' },
+	{ name: 'Product Type', value: 'productType' },
+	{ name: 'SEO', value: 'seo' },
+	{ name: 'Tags', value: 'tags' },
+	{ name: 'Variant Inventory Item', value: 'variantInventoryItem' },
+	{ name: 'Variant Inventory Quantity', value: 'variantInventoryQuantity' },
+	{
+		name: 'Variants',
+		value: 'variants',
+		description: 'Variant IDs, titles, SKUs, prices, and compare-at prices',
+	},
+	{ name: 'Vendor', value: 'vendor' },
+];
+
+const PRODUCT_DEFAULT_RETURN_FIELDS = [
+	'category',
+	'descriptionHtml',
+	'productType',
+	'seo',
+	'tags',
+	'vendor',
 ];
 
 function productCreateFields(): INodeProperties[] {
@@ -97,6 +124,10 @@ export const PRODUCT_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		fields: [
 			gidField('productId', 'Product ID', 'Global product ID in Shopify'),
 			...readMetafieldsFields(),
+			returnFieldsField(PRODUCT_RETURN_FIELD_OPTIONS, PRODUCT_DEFAULT_RETURN_FIELDS),
+			limitField('Variants Limit', 'variantsLimit', 50, {
+				returnFields: ['variants'],
+			}),
 		],
 	},
 	{
@@ -105,7 +136,13 @@ export const PRODUCT_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Many',
 		description: 'Get many products',
 		registryKey: 'product.getMany',
-		fields: paginationFields(PRODUCT_SORT_OPTIONS),
+		fields: [
+			...paginationFields(PRODUCT_SORT_OPTIONS),
+			returnFieldsField(PRODUCT_RETURN_FIELD_OPTIONS, PRODUCT_DEFAULT_RETURN_FIELDS),
+			limitField('Variants Limit', 'variantsLimit', 50, {
+				returnFields: ['variants'],
+			}),
+		],
 	},
 	{
 		resource: 'product',

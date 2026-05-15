@@ -1,5 +1,5 @@
 import type { INodeProperties } from 'n8n-workflow';
-import { gidField } from './common';
+import { gidField, returnFieldsField } from './common';
 import type { IShopifyOperationConfig } from './types';
 
 function taxonomyPaginationFields(): INodeProperties[] {
@@ -57,6 +57,14 @@ function taxonomyCategoryIdField(
 	);
 }
 
+const TAXONOMY_RETURN_FIELD_OPTIONS = [
+	{ name: 'Ancestor IDs', value: 'ancestorIds' },
+	{ name: 'Children IDs', value: 'childrenIds' },
+	{ name: 'Parent ID', value: 'parentId' },
+];
+
+const TAXONOMY_DEFAULT_RETURN_FIELDS = ['ancestorIds', 'childrenIds', 'parentId'];
+
 export const TAXONOMY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 	{
 		resource: 'taxonomy',
@@ -73,6 +81,7 @@ export const TAXONOMY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 				required: true,
 				description: 'Text to search in Shopify product taxonomy categories',
 			},
+			returnFieldsField(TAXONOMY_RETURN_FIELD_OPTIONS, TAXONOMY_DEFAULT_RETURN_FIELDS),
 			...taxonomyPaginationFields(),
 		],
 	},
@@ -82,7 +91,10 @@ export const TAXONOMY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Root Categories',
 		description: 'Get top-level Shopify product taxonomy categories',
 		registryKey: 'taxonomy.getRootCategories',
-		fields: taxonomyPaginationFields(),
+		fields: [
+			returnFieldsField(TAXONOMY_RETURN_FIELD_OPTIONS, TAXONOMY_DEFAULT_RETURN_FIELDS),
+			...taxonomyPaginationFields(),
+		],
 	},
 	{
 		resource: 'taxonomy',
@@ -90,7 +102,11 @@ export const TAXONOMY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Children',
 		description: 'Get child categories for a Shopify taxonomy category',
 		registryKey: 'taxonomy.getChildren',
-		fields: [taxonomyCategoryIdField(), ...taxonomyPaginationFields()],
+		fields: [
+			taxonomyCategoryIdField(),
+			returnFieldsField(TAXONOMY_RETURN_FIELD_OPTIONS, TAXONOMY_DEFAULT_RETURN_FIELDS),
+			...taxonomyPaginationFields(),
+		],
 	},
 	{
 		resource: 'taxonomy',
@@ -98,7 +114,11 @@ export const TAXONOMY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Descendants',
 		description: 'Get descendant categories for a Shopify taxonomy category',
 		registryKey: 'taxonomy.getDescendants',
-		fields: [taxonomyCategoryIdField(), ...taxonomyPaginationFields()],
+		fields: [
+			taxonomyCategoryIdField(),
+			returnFieldsField(TAXONOMY_RETURN_FIELD_OPTIONS, TAXONOMY_DEFAULT_RETURN_FIELDS),
+			...taxonomyPaginationFields(),
+		],
 	},
 	{
 		resource: 'taxonomy',
@@ -106,7 +126,10 @@ export const TAXONOMY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		name: 'Get Category',
 		description: 'Get a Shopify taxonomy category by ID',
 		registryKey: 'taxonomy.get',
-		fields: [taxonomyCategoryIdField()],
+		fields: [
+			taxonomyCategoryIdField(),
+			returnFieldsField(TAXONOMY_RETURN_FIELD_OPTIONS, TAXONOMY_DEFAULT_RETURN_FIELDS),
+		],
 	},
 	{
 		resource: 'taxonomy',
@@ -116,6 +139,7 @@ export const TAXONOMY_OPERATION_CONFIGS: IShopifyOperationConfig[] = [
 		registryKey: 'taxonomy.getCategoryAttributes',
 		fields: [
 			taxonomyCategoryIdField(),
+			returnFieldsField(TAXONOMY_RETURN_FIELD_OPTIONS, TAXONOMY_DEFAULT_RETURN_FIELDS),
 			{
 				displayName: 'Attribute Limit',
 				name: 'attributeLimit',

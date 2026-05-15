@@ -1,5 +1,5 @@
 import type { INodeProperties } from 'n8n-workflow';
-import { gidField } from './common';
+import { gidField, returnFieldsField } from './common';
 import type { IShopifyOperationConfig } from './types';
 
 const INVENTORY_QUANTITY_STATE_OPTIONS = [
@@ -45,6 +45,16 @@ const INVENTORY_REASON_OPTIONS = [
 	{ name: 'Safety Stock', value: 'safety_stock' },
 	{ name: 'Shrinkage', value: 'shrinkage' },
 ];
+
+const INVENTORY_RETURN_FIELD_OPTIONS = [
+	{ name: 'Inventory Levels', value: 'inventoryLevels' },
+	{ name: 'Origin / HS Code', value: 'origin' },
+	{ name: 'Unit Cost', value: 'unitCost' },
+	{ name: 'Variant / Product', value: 'variant' },
+];
+
+const INVENTORY_GET_DEFAULT_RETURN_FIELDS = ['origin', 'unitCost', 'variant'];
+const INVENTORY_GET_MANY_DEFAULT_RETURN_FIELDS = ['variant'];
 
 function inventoryLevelReadOptions(
 	additionalOptions: INodeProperties[] = [],
@@ -96,6 +106,7 @@ function getFields(): INodeProperties[] {
 			'Inventory Item ID',
 			'Global inventory item ID in Shopify',
 		),
+		returnFieldsField(INVENTORY_RETURN_FIELD_OPTIONS, INVENTORY_GET_DEFAULT_RETURN_FIELDS),
 		{
 			displayName: 'Options',
 			name: 'inventoryReadOptions',
@@ -161,6 +172,7 @@ function getManyFields(): INodeProperties[] {
 				},
 			]),
 		},
+		returnFieldsField(INVENTORY_RETURN_FIELD_OPTIONS, INVENTORY_GET_MANY_DEFAULT_RETURN_FIELDS),
 	];
 }
 

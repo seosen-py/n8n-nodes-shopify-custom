@@ -18,6 +18,10 @@ mutation CustomerCreate($input: CustomerInput!) {
 export const CUSTOMER_GET_QUERY = `
 query CustomerGet(
 	$id: ID!
+	$includePhone: Boolean!
+	$includeNote: Boolean!
+	$includeTaxExempt: Boolean!
+	$includeTags: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -27,12 +31,12 @@ query CustomerGet(
 	customer(id: $id) {
 		id
 		email
-		phone
 		firstName
 		lastName
-		note
-		taxExempt
-		tags
+		phone @include(if: $includePhone)
+		note @include(if: $includeNote)
+		taxExempt @include(if: $includeTaxExempt)
+		tags @include(if: $includeTags)
 		updatedAt
 		${OPTIONAL_METAFIELDS_CONNECTION}
 	}
@@ -46,6 +50,10 @@ query CustomerGetMany(
 	$query: String
 	$sortKey: CustomerSortKeys
 	$reverse: Boolean
+	$includePhone: Boolean!
+	$includeNote: Boolean!
+	$includeTaxExempt: Boolean!
+	$includeTags: Boolean!
 	$includeMetafields: Boolean!
 	$metafieldsFirst: Int!
 	$metafieldKeys: [String!]
@@ -58,7 +66,10 @@ query CustomerGetMany(
 			email
 			firstName
 			lastName
-			phone
+			phone @include(if: $includePhone)
+			note @include(if: $includeNote)
+			taxExempt @include(if: $includeTaxExempt)
+			tags @include(if: $includeTags)
 			updatedAt
 			${OPTIONAL_METAFIELDS_CONNECTION}
 		}
