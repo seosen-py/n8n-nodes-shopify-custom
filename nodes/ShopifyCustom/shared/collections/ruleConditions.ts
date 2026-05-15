@@ -1,5 +1,10 @@
 import type { IDataObject, ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
-import { assertNoGraphQLErrors, executeShopifyGraphql } from '../graphql/client';
+import {
+	assertNoGraphQLErrors,
+	executeShopifyGraphql,
+	getSelectedShopifyCredentials,
+	normalizeShopSubdomain,
+} from '../graphql/client';
 
 export type CollectionRuleValueType = 'text' | 'number' | 'boolean' | 'metaobject_reference';
 
@@ -87,7 +92,7 @@ query CollectionRuleConditions {
 `;
 
 const CACHE_TTL_MS = 2 * 60 * 1000;
-let ruleConditionsCache: { expiresAt: number; data: IRuleConditionsData } | undefined;
+const ruleConditionsCache = new Map<string, { expiresAt: number; data: IRuleConditionsData }>();
 
 function asString(value: unknown): string {
 	return String(value ?? '').trim();
@@ -95,6 +100,22 @@ function asString(value: unknown): string {
 
 function isObject(value: unknown): value is IDataObject {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function optionalCachePart(value: unknown): string {
+	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
+}
+
+async function getRuleConditionsCacheKey(context: ILoadOptionsFunctions): Promise<string> {
+	const { authentication, credentialName, credentials } = await getSelectedShopifyCredentials(context);
+	const shopSubdomain =
+		typeof credentials.shopSubdomain === 'string'
+			? normalizeShopSubdomain(credentials.shopSubdomain)
+			: '';
+	const apiVersion = optionalCachePart(credentials.apiVersion) || '2025-10';
+	const clientId = optionalCachePart(credentials.clientId);
+
+	return [credentialName, authentication, shopSubdomain, apiVersion, clientId].join('::');
 }
 
 function toLabel(value: string): string {
@@ -205,8 +226,10 @@ function normalizeRuleConditions(value: unknown): IRuleConditionsData {
 async function listCollectionRuleConditions(
 	context: ILoadOptionsFunctions,
 ): Promise<IRuleConditionsData> {
-	if (ruleConditionsCache && ruleConditionsCache.expiresAt > Date.now()) {
-		return ruleConditionsCache.data;
+	const cacheKey = await getRuleConditionsCacheKey(context);
+	const cached = ruleConditionsCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) {
+		return cached.data;
 	}
 
 	const response = await executeShopifyGraphql<ICollectionRuleConditionsResponse>(
@@ -218,10 +241,10 @@ async function listCollectionRuleConditions(
 	assertNoGraphQLErrors(context, response, 0);
 
 	const data = normalizeRuleConditions(response.data?.collectionRulesConditions);
-	ruleConditionsCache = {
+	ruleConditionsCache.set(cacheKey, {
 		expiresAt: Date.now() + CACHE_TTL_MS,
 		data,
-	};
+	});
 
 	return data;
 }

@@ -1,5 +1,10 @@
 import type { ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
-import { assertNoGraphQLErrors, executeShopifyGraphql } from '../graphql/client';
+import {
+	assertNoGraphQLErrors,
+	executeShopifyGraphql,
+	getSelectedShopifyCredentials,
+	normalizeShopSubdomain,
+} from '../graphql/client';
 import { METAFIELD_DEFINITION_LIST_QUERY } from '../graphql/templates/metafields';
 import type { ShopifyMetafieldOwnerType } from '../../config/resources';
 
@@ -28,8 +33,32 @@ interface IMetafieldDefinitionsResponse {
 const DEFINITIONS_CACHE = new Map<string, { expiresAt: number; data: IMetafieldDefinition[] }>();
 const TTL_MS = 2 * 60 * 1000;
 
-function makeCacheKey(ownerType: ShopifyMetafieldOwnerType, query?: string): string {
-	return `${ownerType}::${query ?? ''}`;
+function optionalCachePart(value: unknown): string {
+	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
+}
+
+async function makeCacheKey(
+	context: ILoadOptionsFunctions,
+	ownerType: ShopifyMetafieldOwnerType,
+	query?: string,
+): Promise<string> {
+	const { authentication, credentialName, credentials } = await getSelectedShopifyCredentials(context);
+	const shopSubdomain =
+		typeof credentials.shopSubdomain === 'string'
+			? normalizeShopSubdomain(credentials.shopSubdomain)
+			: '';
+	const apiVersion = optionalCachePart(credentials.apiVersion) || '2025-10';
+	const clientId = optionalCachePart(credentials.clientId);
+
+	return [
+		credentialName,
+		authentication,
+		shopSubdomain,
+		apiVersion,
+		clientId,
+		ownerType,
+		query ?? '',
+	].join('::');
 }
 
 export function encodeDefinitionOptionValue(definition: IMetafieldDefinition): string {
@@ -67,7 +96,7 @@ export async function listMetafieldDefinitions(
 	ownerType: ShopifyMetafieldOwnerType,
 	query = '',
 ): Promise<IMetafieldDefinition[]> {
-	const cacheKey = makeCacheKey(ownerType, query);
+	const cacheKey = await makeCacheKey(context, ownerType, query);
 	const cacheEntry = DEFINITIONS_CACHE.get(cacheKey);
 	if (cacheEntry && cacheEntry.expiresAt > Date.now()) {
 		return cacheEntry.data;

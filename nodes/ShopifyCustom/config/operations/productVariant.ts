@@ -67,10 +67,12 @@ function productVariantAdditionalFields(defaultFields: string[] = []): INodeProp
 function productVariantBaseFields(): INodeProperties[] {
 	return [
 		{
-			displayName: 'Title',
+			displayName: 'Title Option Value',
 			name: 'title',
 			type: 'string',
 			default: '',
+			description:
+				'Value for the default Shopify variant option named "Title". For multi-option products, use a dedicated option-values implementation.',
 		},
 		{
 			displayName: 'SKU',

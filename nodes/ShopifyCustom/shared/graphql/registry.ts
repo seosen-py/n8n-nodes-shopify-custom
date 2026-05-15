@@ -329,6 +329,34 @@ function getProductVariantReadVariables(parameters: IDataObject): IDataObject {
 	};
 }
 
+function parseProductVariantBulkInput(parameters: IDataObject, variantId?: string): IDataObject {
+	const title = asString(parameters.title);
+	const sku = asString(parameters.sku);
+	const compareAtPrice = asNumber(parameters.compareAtPrice);
+	const variantInput: IDataObject = {
+		id: variantId,
+		barcode: asString(parameters.barcode),
+		price: asNumber(parameters.price)?.toString(),
+		compareAtPrice:
+			compareAtPrice !== undefined && compareAtPrice > 0
+				? compareAtPrice.toString()
+				: undefined,
+		taxable: asBoolean(parameters.taxable),
+		inventoryItem: sku ? { sku } : undefined,
+	};
+
+	if (title) {
+		variantInput.optionValues = [
+			{
+				name: title,
+				optionName: 'Title',
+			},
+		];
+	}
+
+	return variantInput;
+}
+
 function parseTags(value: unknown): string[] | undefined {
 	const raw = asString(value);
 	if (!raw) {
@@ -1547,16 +1575,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: PRODUCT_VARIANT_CREATE_MUTATION,
 		buildVariables: (parameters) => ({
 			productId: asString(parameters.productId),
-			variants: [
-				{
-					title: asString(parameters.title),
-					sku: asString(parameters.sku),
-					barcode: asString(parameters.barcode),
-					price: asNumber(parameters.price)?.toString(),
-					compareAtPrice: asNumber(parameters.compareAtPrice)?.toString(),
-					taxable: asBoolean(parameters.taxable),
-				},
-			],
+			variants: [parseProductVariantBulkInput(parameters)],
 		}),
 		mapSimplified: (data) => getPathValue(data, ['productVariantsBulkCreate', 'productVariants']) ?? [],
 		getUserErrors: (data) => parseUserErrors(data, ['productVariantsBulkCreate']),
@@ -1586,17 +1605,7 @@ const operationRegistry: Record<ShopifyOperationKey, IRegistryOperation> = {
 		document: PRODUCT_VARIANT_UPDATE_MUTATION,
 		buildVariables: (parameters) => ({
 			productId: asString(parameters.productId),
-			variants: [
-				{
-					id: asString(parameters.variantId),
-					title: asString(parameters.title),
-					sku: asString(parameters.sku),
-					barcode: asString(parameters.barcode),
-					price: asNumber(parameters.price)?.toString(),
-					compareAtPrice: asNumber(parameters.compareAtPrice)?.toString(),
-					taxable: asBoolean(parameters.taxable),
-				},
-			],
+			variants: [parseProductVariantBulkInput(parameters, asString(parameters.variantId))],
 		}),
 		mapSimplified: (data) => getPathValue(data, ['productVariantsBulkUpdate', 'productVariants']) ?? [],
 		getUserErrors: (data) => parseUserErrors(data, ['productVariantsBulkUpdate']),

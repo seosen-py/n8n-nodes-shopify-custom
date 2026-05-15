@@ -1,5 +1,10 @@
 import type { ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
-import { assertNoGraphQLErrors, executeShopifyGraphql } from '../graphql/client';
+import {
+	assertNoGraphQLErrors,
+	executeShopifyGraphql,
+	getSelectedShopifyCredentials,
+	normalizeShopSubdomain,
+} from '../graphql/client';
 
 interface IThemeFileNode {
 	filename: string;
@@ -42,6 +47,27 @@ function escapeRegex(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function optionalCachePart(value: unknown): string {
+	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
+}
+
+async function getTemplateSuffixCacheKey(
+	context: ILoadOptionsFunctions,
+	templateName: string,
+): Promise<string> {
+	const { authentication, credentialName, credentials } = await getSelectedShopifyCredentials(context);
+	const shopSubdomain =
+		typeof credentials.shopSubdomain === 'string'
+			? normalizeShopSubdomain(credentials.shopSubdomain)
+			: '';
+	const apiVersion = optionalCachePart(credentials.apiVersion) || '2025-10';
+	const clientId = optionalCachePart(credentials.clientId);
+
+	return [credentialName, authentication, shopSubdomain, apiVersion, clientId, templateName].join(
+		'::',
+	);
+}
+
 function toSuffixLabel(value: string): string {
 	return value
 		.split(/[._-]/g)
@@ -63,7 +89,7 @@ export async function getTemplateSuffixOptions(
 	context: ILoadOptionsFunctions,
 	templateName: string,
 ): Promise<INodePropertyOptions[]> {
-	const cacheKey = templateName;
+	const cacheKey = await getTemplateSuffixCacheKey(context, templateName);
 	const cached = templateSuffixCache.get(cacheKey);
 	if (cached && cached.expiresAt > Date.now()) {
 		return cached.data;
