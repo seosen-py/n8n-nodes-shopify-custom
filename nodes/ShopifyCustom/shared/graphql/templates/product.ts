@@ -18,6 +18,22 @@ mutation ProductCreate($product: ProductCreateInput!) {
 			title
 			handle
 			status
+			variants(first: 10) {
+				nodes {
+					id
+					title
+					sku
+					price
+					compareAtPrice
+					inventoryQuantity
+					inventoryItem {
+						id
+						sku
+						tracked
+						requiresShipping
+					}
+				}
+			}
 			seo {
 				${SEO_FIELDS}
 			}

@@ -8,6 +8,14 @@ mutation ProductVariantCreate($productId: ID!, $variants: [ProductVariantsBulkIn
 			title
 			sku
 			price
+			compareAtPrice
+			inventoryQuantity
+			inventoryItem {
+				id
+				sku
+				tracked
+				requiresShipping
+			}
 			updatedAt
 		}
 		${USER_ERRORS_FIELDS}
@@ -148,6 +156,14 @@ mutation ProductVariantUpdate($productId: ID!, $variants: [ProductVariantsBulkIn
 			title
 			sku
 			price
+			compareAtPrice
+			inventoryQuantity
+			inventoryItem {
+				id
+				sku
+				tracked
+				requiresShipping
+			}
 			updatedAt
 		}
 		${USER_ERRORS_FIELDS}
